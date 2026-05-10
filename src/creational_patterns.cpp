@@ -1,13 +1,13 @@
 // =============================================================================
-// CREATIONAL PATTERNS — C++ Implementations
+// CREATIONAL PATTERNS - C++ Implementations
 // Based on: Design Patterns: Elements of Reusable Object-Oriented Software
 //           Erich Gamma, Richard Helm, Ralph Johnson, John Vlissides (GoF)
 //
 // Each pattern section contains:
-//   PROJECT      — a real-world mini-project
-//   WHY          — decision process: why this pattern fits
-//   DECISION     — what alternatives were ruled out and why
-//   CODE         — full C++ implementation with demo
+//   PROJECT: a real-world mini-project
+//   WHY: decision process: why this pattern fits
+//   DECISION: what alternatives were ruled out and why
+//   CODE: full C++ implementation with demo
 // =============================================================================
 
 #include <cassert>
@@ -17,35 +17,35 @@
 #include <unordered_map>
 #include <vector>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATTERN 1: ABSTRACT FACTORY
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// PROJECT: Cross-Platform UI Widget Toolkit
-//   A desktop app needs to render Buttons and Checkboxes. It must look native
-//   on both Windows and macOS without scattering "if (windows)…else…" checks
-//   everywhere. The set of widget *kinds* (Button, Checkbox) is stable, but
-//   more look-and-feel themes may be added later.
-//
-// WHY ABSTRACT FACTORY?
-//   ✓ We have a FAMILY of related products (Button + Checkbox) that must
-//     match — we never want a macOS button next to a Windows checkbox.
-//   ✓ We want to swap the whole theme by swapping one factory object.
-//   ✓ Client code should never call `new WindowsButton` directly.
-//
-// ALTERNATIVES RULED OUT:
-//   Factory Method alone — only handles one product per creator; can't enforce
-//                          family consistency across Button + Checkbox
-//                          together.
-//   Direct if/else        — spreads platform knowledge everywhere; nightmare
-//                          when a third theme (Linux GTK) is added.
-//
-// KEY TRADE-OFF: Adding a *new kind* of widget (e.g., Slider) requires touching
-// every concrete factory — this is the pattern's known liability.
-// ─────────────────────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────────────────────
+/// PATTERN 1: ABSTRACT FACTORY
+/// ─────────────────────────────────────────────────────────────────────────────
+///
+/// PROJECT: Cross-Platform UI Widget Toolkit
+///   A desktop app needs to render Buttons and Checkboxes. It must look native
+///   on both Windows and macOS without scattering "if (windows)…else…" checks
+///   everywhere. The set of widget *kinds* (Button, Checkbox) is stable, but
+///   more look-and-feel themes may be added later.
+///
+/// WHY ABSTRACT FACTORY?
+///   ✓ We have a FAMILY of related products (Button + Checkbox) that must
+///     match - we never want a macOS button next to a Windows checkbox.
+///   ✓ We want to swap the whole theme by swapping one factory object.
+///   ✓ Client code should never call `new WindowsButton` directly.
+///
+/// ALTERNATIVES RULED OUT:
+///   Factory Method alone: only handles one product per creator; can't enforce
+///                          family consistency across Button + Checkbox
+///                          together.
+///   Direct if/else: spreads platform knowledge everywhere; nightmare
+///                          when a third theme (Linux GTK) is added.
+///
+/// KEY TRADE-OFF: Adding a *new kind* of widget (e.g., Slider) requires touching
+/// every concrete factory - this is the pattern's known liability.
+/// ─────────────────────────────────────────────────────────────────────────────
 namespace abstract_factory {
 
-// Abstract products
+/// Abstract products
 struct Button {
     virtual void render() const = 0;
     virtual ~Button()           = default;
@@ -55,7 +55,7 @@ struct Checkbox {
     virtual ~Checkbox()         = default;
 };
 
-// Concrete products — Windows family
+/// Concrete products - Windows family
 struct WindowsButton : Button {
     void render() const override { std::cout << "[Windows] Rendering a rectangular button\n"; }
 };
@@ -63,7 +63,7 @@ struct WindowsCheckbox : Checkbox {
     void render() const override { std::cout << "[Windows] Rendering a square checkbox\n"; }
 };
 
-// Concrete products — macOS family
+/// Concrete products - macOS family
 struct MacButton : Button {
     void render() const override { std::cout << "[macOS] Rendering a rounded button\n"; }
 };
@@ -71,14 +71,14 @@ struct MacCheckbox : Checkbox {
     void render() const override { std::cout << "[macOS] Rendering a circular checkbox\n"; }
 };
 
-// Abstract factory — one creation method per product KIND
+/// Abstract factory: one creation method per product KIND
 struct WidgetFactory {
     virtual std::unique_ptr<Button>   createButton() const   = 0;
     virtual std::unique_ptr<Checkbox> createCheckbox() const = 0;
     virtual ~WidgetFactory()                                 = default;
 };
 
-// Concrete factories — one per FAMILY
+/// Concrete factories: one per FAMILY
 struct WindowsFactory : WidgetFactory {
     std::unique_ptr<Button> createButton() const override {
         return std::make_unique<WindowsButton>();
@@ -94,8 +94,7 @@ struct MacFactory : WidgetFactory {
     }
 };
 
-// Client — works only through the abstract factory; never touches concrete
-// types
+/// Client: works only through the abstract factory; never touches concrete types
 void renderUI(const WidgetFactory& factory) {
     auto btn = factory.createButton();
     auto chk = factory.createCheckbox();
@@ -115,30 +114,30 @@ void demo() {
 
 }  // namespace abstract_factory
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATTERN 2: BUILDER
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// PROJECT: Custom Computer Configurator
-//   Users assemble a PC by choosing CPU, RAM, storage, and GPU. Not all
-//   fields are required (a server skips GPU; a workstation skips gaming GPU).
-//   The final Product is a complex object assembled step-by-step.
-//
-// WHY BUILDER?
-//   ✓ The product (Computer) has 4+ independent optional parts.
-//   ✓ The same Director algorithm produces a GamingPC and a ServerPC just by
-//     swapping the ConcreteBuilder — construction process is shared.
-//   ✓ A telescoping constructor (Computer(cpu, ram, storage, gpu, cooling…))
-//     would be unreadable and fragile.
-//
-// ALTERNATIVES RULED OUT:
-//   Abstract Factory — creates *families* in one call; can't build one complex
-//                       object part-by-part.
-//   Factory Method   — no incremental assembly; just returns one object.
-//
-// KEY TRADE-OFF: More classes than a simple constructor, but the Director
-// separates "how to build" from "what is built," which is the payoff.
-// ─────────────────────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────────────────────
+/// PATTERN 2: BUILDER
+/// ─────────────────────────────────────────────────────────────────────────────
+///
+/// PROJECT: Custom Computer Configurator
+///   Users assemble a PC by choosing CPU, RAM, storage, and GPU. Not all
+///   fields are required (a server skips GPU; a workstation skips gaming GPU).
+///   The final Product is a complex object assembled step-by-step.
+///
+/// WHY BUILDER?
+///   ✓ The product (Computer) has 4+ independent optional parts.
+///   ✓ The same Director algorithm produces a GamingPC and a ServerPC just by
+///     swapping the ConcreteBuilder - construction process is shared.
+///   ✓ A telescoping constructor (Computer(cpu, ram, storage, gpu, cooling…))
+///     would be unreadable and fragile.
+///
+/// ALTERNATIVES RULED OUT:
+///   Abstract Factory: creates *families* in one call; can't build one complex
+///                       object part-by-part.
+///   Factory Method: no incremental assembly; just returns one object.
+///
+/// KEY TRADE-OFF: More classes than a simple constructor, but the Director
+/// separates "how to build" from "what is built," which is the payoff.
+/// ─────────────────────────────────────────────────────────────────────────────
 namespace builder {
 
 struct Computer {
@@ -149,7 +148,7 @@ struct Computer {
     }
 };
 
-// Builder interface — declares every possible construction step
+/// Builder interface: declares every possible construction step
 struct ComputerBuilder {
     virtual void     setCPU(const std::string& cpu)   = 0;
     virtual void     setRAM(const std::string& ram)   = 0;
@@ -159,7 +158,7 @@ struct ComputerBuilder {
     virtual ~ComputerBuilder()                        = default;
 };
 
-// ConcreteBuilder — assembles parts into a Computer
+/// ConcreteBuilder: assembles parts into a Computer
 struct PCBuilder : ComputerBuilder {
     Computer pc;
     void     setCPU(const std::string& cpu) override { pc.cpu = cpu; }
@@ -169,7 +168,7 @@ struct PCBuilder : ComputerBuilder {
     Computer getResult() override { return pc; }
 };
 
-// Director — knows the correct order/steps for each configuration
+/// Director: knows the correct order/steps for each configuration
 struct Director {
     ComputerBuilder* builder = nullptr;
 
@@ -183,7 +182,7 @@ struct Director {
         builder->setCPU("AMD EPYC 9654");
         builder->setRAM("512GB ECC DDR5");
         builder->setStorage("8TB NVMe RAID");
-        // no GPU — servers rarely need one
+        // no GPU - servers rarely need one
     }
 };
 
@@ -203,30 +202,30 @@ void demo() {
 
 }  // namespace builder
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATTERN 3: FACTORY METHOD
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// PROJECT: Game Enemy Spawner
-//   A game has different levels: ForestLevel spawns Goblins, DungeonLevel
-//   spawns Skeletons. The level class orchestrates enemy waves (same logic),
-//   but each subclass decides which Enemy to spawn. New levels added without
-//   touching wave logic.
-//
-// WHY FACTORY METHOD?
-//   ✓ The Creator (Level) has an algorithm (spawnWave) that needs an Enemy,
-//     but can't predict which concrete Enemy type it will use.
-//   ✓ Subclasses (ForestLevel, DungeonLevel) should decide the product —
-//     this is the textbook Factory Method scenario.
-//   ✓ The wave-spawning logic is shared; only the enemy type varies.
-//
-// ALTERNATIVES RULED OUT:
-//   Abstract Factory — we have one product (Enemy), not a family; overkill.
-//   Prototype        — would work, but requires every level to hold a
-//                       prototype object; Factory Method is simpler here.
-//   Direct new       — hard-codes the concrete type; levels can't be reused
-//                       in a different enemy context.
-// ─────────────────────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────────────────────
+/// PATTERN 3: FACTORY METHOD
+/// ─────────────────────────────────────────────────────────────────────────────
+///
+/// PROJECT: Game Enemy Spawner
+///   A game has different levels: ForestLevel spawns Goblins, DungeonLevel
+///   spawns Skeletons. The level class orchestrates enemy waves (same logic),
+///   but each subclass decides which Enemy to spawn. New levels added without
+///   touching wave logic.
+///
+/// WHY FACTORY METHOD?
+///   ✓ The Creator (Level) has an algorithm (spawnWave) that needs an Enemy,
+///     but can't predict which concrete Enemy type it will use.
+///   ✓ Subclasses (ForestLevel, DungeonLevel) should decide the product -
+///     this is the textbook Factory Method scenario.
+///   ✓ The wave-spawning logic is shared; only the enemy type varies.
+///
+/// ALTERNATIVES RULED OUT:
+///   Abstract Factory: we have one product (Enemy), not a family; overkill.
+///   Prototype: would work, but requires every level to hold a
+///                       prototype object; Factory Method is simpler here.
+///   Direct new: hard-codes the concrete type; levels can't be reused
+///                       in a different enemy context.
+/// ─────────────────────────────────────────────────────────────────────────────
 namespace factory_method {
 
 struct Enemy {
@@ -244,11 +243,11 @@ struct Dragon : Enemy {
     void attack() const override { std::cout << "Dragon breathes fire!\n"; }
 };
 
-// Creator — contains the template algorithm; declares the factory method
+/// Creator: contains the template algorithm; declares the factory method
 struct Level {
     virtual std::unique_ptr<Enemy> createEnemy() const = 0;  // <- factory method
 
-    // Template algorithm that uses the factory method
+    /// Template algorithm that uses the factory method
     void spawnWave(int count) const {
         std::cout << "Spawning wave of " << count << " enemies:\n";
         for (int i = 0; i < count; ++i) {
@@ -259,7 +258,7 @@ struct Level {
     virtual ~Level() = default;
 };
 
-// Concrete creators — override only the factory method
+/// Concrete creators: override only the factory method
 struct ForestLevel : Level {
     std::unique_ptr<Enemy> createEnemy() const override { return std::make_unique<Goblin>(); }
 };
@@ -286,29 +285,29 @@ void demo() {
 
 }  // namespace factory_method
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATTERN 4: PROTOTYPE
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// PROJECT: Magic Spell System (Spell Palette)
-//   A game has a palette of preconfigured spells (Fireball lv3, Ice Storm
-//   lv5, etc.). When a player casts a spell, the system clones the registered
-//   prototype rather than recreating the spell from scratch. Runtime-loaded
-//   spell mods can register new prototypes without new C++ subclasses.
-//
-// WHY PROTOTYPE?
-//   ✓ Spells vary in *state* (level, damage, duration), not just class.
-//     Two Fireballs at different levels shouldn't require two subclasses.
-//   ✓ Spell prototypes are registered at runtime (from config/mods).
-//   ✓ Cloning is cheaper than reconfiguring from scratch for complex objects.
-//
-// ALTERNATIVES RULED OUT:
-//   Factory Method — would need one Level subclass per spell variant; class
-//                     explosion (FireballLv1, FireballLv2, FireballLv3…).
-//   Abstract Factory — for families, not state-varied singletons.
-//   Direct new       — requires knowing the concrete class at call site;
-//                       mods can't register new types at runtime.
-// ─────────────────────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────────────────────
+/// PATTERN 4: PROTOTYPE
+/// ─────────────────────────────────────────────────────────────────────────────
+///
+/// PROJECT: Magic Spell System (Spell Palette)
+///   A game has a palette of preconfigured spells (Fireball lv3, Ice Storm
+///   lv5, etc.). When a player casts a spell, the system clones the registered
+///   prototype rather than recreating the spell from scratch. Runtime-loaded
+///   spell mods can register new prototypes without new C++ subclasses.
+///
+/// WHY PROTOTYPE?
+///   ✓ Spells vary in *state* (level, damage, duration), not just class.
+///     Two Fireballs at different levels shouldn't require two subclasses.
+///   ✓ Spell prototypes are registered at runtime (from config/mods).
+///   ✓ Cloning is cheaper than reconfiguring from scratch for complex objects.
+///
+/// ALTERNATIVES RULED OUT:
+///   Factory Method: would need one Level subclass per spell variant; class
+///                     explosion (FireballLv1, FireballLv2, FireballLv3…).
+///   Abstract Factory: for families, not state-varied singletons.
+///   Direct new: requires knowing the concrete class at call site;
+///                       mods can't register new types at runtime.
+/// ─────────────────────────────────────────────────────────────────────────────
 namespace prototype {
 
 struct Spell {
@@ -331,7 +330,7 @@ struct IceStorm : Spell {
     std::unique_ptr<Spell> clone() const override { return std::make_unique<IceStorm>(*this); }
 };
 
-// PrototypeManager (registry) — maps string keys to prototype instances
+/// PrototypeManager (registry): maps string keys to prototype instances
 struct SpellRegistry {
     std::unordered_map<std::string, std::unique_ptr<Spell>> registry;
 
@@ -380,49 +379,49 @@ void demo() {
 
 }  // namespace prototype
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATTERN 5: SINGLETON
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// PROJECT: Application Configuration Manager
-//   A desktop app reads its settings (theme, language, max_threads) from a
-//   config file once at startup. Many subsystems (UI, networking, logging)
-//   need to read these settings. There must be exactly one config object —
-//   two instances would risk reading different values or double-parsing the
-//   file.
-//
-// WHY SINGLETON?
-//   ✓ Uniqueness is a *domain requirement*, not a convenience: two config
-//     instances parsing the same file would be a bug.
-//   ✓ Global accessibility is needed by disparate subsystems.
-//   ✓ Lazy initialization defers disk I/O until first use.
-//
-// ALTERNATIVES RULED OUT:
-//   Global variable — doesn't enforce uniqueness; anyone can create another.
-//   Dependency injection of the same object — perfectly valid and more
-//   testable, but here uniqueness enforcement justifies the Singleton.
-//
-// WARNING APPLIED: Singleton makes unit testing harder. Use it only when
-// uniqueness is a genuine system constraint, not just "convenient."
-//
-// THREAD SAFETY: Using C++11 Meyers Singleton — local static initialization
-// is guaranteed thread-safe by the standard.
-// ─────────────────────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────────────────────
+/// PATTERN 5: SINGLETON
+/// ─────────────────────────────────────────────────────────────────────────────
+///
+/// PROJECT: Application Configuration Manager
+///   A desktop app reads its settings (theme, language, max_threads) from a
+///   config file once at startup. Many subsystems (UI, networking, logging)
+///   need to read these settings. There must be exactly one config object -
+///   two instances would risk reading different values or double-parsing the
+///   file.
+///
+/// WHY SINGLETON?
+///   ✓ Uniqueness is a *domain requirement*, not a convenience: two config
+///     instances parsing the same file would be a bug.
+///   ✓ Global accessibility is needed by disparate subsystems.
+///   ✓ Lazy initialization defers disk I/O until first use.
+///
+/// ALTERNATIVES RULED OUT:
+///   Global variable: doesn't enforce uniqueness; anyone can create another.
+///   Dependency injection of the same object: perfectly valid and more
+///   testable, but here uniqueness enforcement justifies the Singleton.
+///
+/// WARNING APPLIED: Singleton makes unit testing harder. Use it only when
+/// uniqueness is a genuine system constraint, not just "convenient."
+///
+/// THREAD SAFETY: Using C++11 Meyers Singleton - local static initialization
+/// is guaranteed thread-safe by the standard.
+/// ─────────────────────────────────────────────────────────────────────────────
 namespace singleton {
 
 class AppConfig {
    public:
-    // Meyers Singleton — thread-safe in C++11 and later
+    /// Meyers Singleton - thread-safe in C++11 and later
     static AppConfig& instance() {
         static AppConfig inst;  // initialized exactly once, lazily
         return inst;
     }
 
-    // Delete copy/move to prevent accidental duplication
+    /// Delete copy/move to prevent accidental duplication
     AppConfig(const AppConfig&)            = delete;
     AppConfig& operator=(const AppConfig&) = delete;
 
-    // Configuration values (in a real app, loaded from a file)
+    /// Configuration values (in a real app, loaded from a file)
     std::string theme      = "dark";
     std::string language   = "en_US";
     int         maxThreads = 8;
@@ -442,13 +441,13 @@ class AppConfig {
 void demo() {
     std::cout << "\n=== Singleton: Application Config Manager ===\n";
 
-    // Multiple call sites — all get the same instance
+    // Multiple call sites - all get the same instance
     AppConfig& cfg1 = AppConfig::instance();
     AppConfig& cfg2 = AppConfig::instance();
     cfg1.describe();
 
     cfg2.maxThreads = 16;  // change via cfg2…
-    cfg1.describe();       // …visible through cfg1 — same object
+    cfg1.describe();       // …visible through cfg1 - same object
 
     assert(&cfg1 == &cfg2);
     std::cout << "cfg1 and cfg2 are the same object: " << std::boolalpha << (&cfg1 == &cfg2)

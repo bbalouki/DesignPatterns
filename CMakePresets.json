@@ -1,0 +1,60 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+    },
+
+    {
+      "name": "mingw",
+      "displayName": "GCC/Clang MinGW — Debug",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "mingw-rel",
+      "displayName": "GCC/Clang MinGW — Release",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+
+    {
+      "name": "win",
+      "displayName": "MSVC — Debug",
+      "inherits": "base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64"
+    },
+
+    {
+      "name": "cross",
+      "displayName": "Linux / macOS — Debug",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "cross-rel",
+      "displayName": "Linux / macOS — Release",
+      "inherits": "base",
+      "generator": "Ninja",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "mingw", "configurePreset": "mingw" },
+    { "name": "mingw-rel", "configurePreset": "mingw-rel" },
+    { "name": "win", "configurePreset": "win", "configuration": "Debug" },
+    { "name": "win-rel", "configurePreset": "win", "configuration": "Release" },
+    { "name": "cross", "configurePreset": "cross" },
+    { "name": "cross-rel", "configurePreset": "cross-rel" }
+  ]
+}
