@@ -13,7 +13,6 @@
 #include <unordered_map>
 #include <vector>
 #ifdef _WIN32
-#define NOMINMAX
 #include <windows.h>
 #endif
 
