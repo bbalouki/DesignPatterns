@@ -12,6 +12,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// PATTERN 6: ADAPTER (Object form)
@@ -54,27 +58,27 @@ struct StripeAPI {
 
 /// Object Adapter: wraps StripeAPI, exposes PaymentProcessor interface
 struct StripeAdapter : PaymentProcessor {
-    explicit StripeAdapter(std::shared_ptr<StripeAPI> stripe) : stripe_(stripe) {}
+    explicit StripeAdapter(std::shared_ptr<StripeAPI> stripe) : m_stripe(stripe) {}
 
-    void charge(double amount) override { stripe_->makePayment(amount); }
-    void refund(double amount) override { stripe_->reverseCharge(amount); }
+    void charge(double amount) override { m_stripe->makePayment(amount); }
+    void refund(double amount) override { m_stripe->reverseCharge(amount); }
 
    private:
-    std::shared_ptr<StripeAPI> stripe_;
+    std::shared_ptr<StripeAPI> m_stripe;
 };
 
 /// Client: only knows PaymentProcessor; unaware of Stripe internals
-void processOrder(PaymentProcessor& p, double total) {
+void processOrder(PaymentProcessor& prc, double total) {
     std::cout << "Charging customer: ";
-    p.charge(total);
+    prc.charge(total);
 }
 
 void demo() {
     std::cout << "\n=== Adapter: Legacy Payment Gateway ===\n";
     auto          stripeSDK = std::make_shared<StripeAPI>();
-    StripeAdapter adapter(stripeSDK);
-    processOrder(adapter, 99.99);
-    adapter.refund(15.00);
+    StripeAdapter adp(stripeSDK);
+    processOrder(adp, 99.99);
+    adp.refund(15.00);
 }
 
 }  // namespace adapter
@@ -105,53 +109,53 @@ namespace bridge {
 
 /// Implementor interface: the "device" axis
 struct Device {
-    virtual void        powerOn()        = 0;
-    virtual void        powerOff()       = 0;
-    virtual void        setVolume(int v) = 0;
-    virtual std::string name() const     = 0;
-    virtual ~Device()                    = default;
+    virtual void        powerOn()          = 0;
+    virtual void        powerOff()         = 0;
+    virtual void        setVolume(int vol) = 0;
+    virtual std::string name() const       = 0;
+    virtual ~Device()                      = default;
 };
 
 struct TV : Device {
     void        powerOn() override { std::cout << "[TV] Power ON\n"; }
     void        powerOff() override { std::cout << "[TV] Power OFF\n"; }
-    void        setVolume(int v) override { std::cout << "[TV] Volume → " << v << "\n"; }
+    void        setVolume(int vol) override { std::cout << "[TV] Volume → " << vol << "\n"; }
     std::string name() const override { return "TV"; }
 };
 struct Radio : Device {
     void        powerOn() override { std::cout << "[Radio] Power ON\n"; }
     void        powerOff() override { std::cout << "[Radio] Power OFF\n"; }
-    void        setVolume(int v) override { std::cout << "[Radio] Volume → " << v << "\n"; }
+    void        setVolume(int vol) override { std::cout << "[Radio] Volume → " << vol << "\n"; }
     std::string name() const override { return "Radio"; }
 };
 
 /// Abstraction: the "remote" axis; holds the bridge to a Device
 struct Remote {
-    explicit Remote(std::shared_ptr<Device> device) : device_(device) {}
-    virtual void togglePower() { device_->powerOn(); }
-    virtual void volumeUp() { device_->setVolume(volume_ += 10); }
+    explicit Remote(std::shared_ptr<Device> device) : m_device(device) {}
+    virtual void togglePower() { m_device->powerOn(); }
+    virtual void volumeUp() { m_device->setVolume(m_volume += 10); }
     virtual ~Remote() = default;
 
    protected:
-    std::shared_ptr<Device> device_;
-    int                     volume_ = 50;
+    std::shared_ptr<Device> m_device;
+    int                     m_volume = 50;
 };
 
 /// Refined Abstraction: extends Remote without touching Device
 struct AdvancedRemote : Remote {
     explicit AdvancedRemote(std::shared_ptr<Device> device) : Remote(device) {}
     void mute() {
-        std::cout << "[AdvancedRemote] Muting " << device_->name() << "\n";
-        device_->setVolume(0);
+        std::cout << "[AdvancedRemote] Muting " << m_device->name() << "\n";
+        m_device->setVolume(0);
     }
 };
 
 void demo() {
     std::cout << "\n=== Bridge: Remote Control & Devices ===\n";
-    auto tv    = std::make_shared<TV>();
+    auto tvDev = std::make_shared<TV>();
     auto radio = std::make_shared<Radio>();
 
-    Remote basicTVRemote(tv);
+    Remote basicTVRemote(tvDev);
     basicTVRemote.togglePower();
     basicTVRemote.volumeUp();
 
@@ -187,7 +191,7 @@ namespace composite {
 /// Component: uniform interface for both leaves and composites
 struct FileSystemNode {
     std::string name;
-    explicit FileSystemNode(std::string n) : name(std::move(n)) {}
+    explicit FileSystemNode(std::string nam) : name(std::move(nam)) {}
 
     virtual long size() const                = 0;
     virtual void print(int indent = 0) const = 0;
@@ -198,7 +202,7 @@ struct FileSystemNode {
 // Leaf
 struct File : FileSystemNode {
     long bytes;
-    File(std::string n, long b) : FileSystemNode(std::move(n)), bytes(b) {}
+    File(std::string nam, long byt) : FileSystemNode(std::move(nam)), bytes(byt) {}
     long size() const override { return bytes; }
     void print(int indent) const override {
         std::cout << std::string(indent, ' ') << "📄 " << name << " (" << bytes << " B)\n";
@@ -208,16 +212,16 @@ struct File : FileSystemNode {
 // Composite
 struct Folder : FileSystemNode {
     std::vector<std::shared_ptr<FileSystemNode>> children;
-    explicit Folder(std::string n) : FileSystemNode(std::move(n)) {}
+    explicit Folder(std::string nam) : FileSystemNode(std::move(nam)) {}
     void add(std::shared_ptr<FileSystemNode> node) override { children.push_back(node); }
     long size() const override {
         long total = 0;
-        for (const auto& c : children) total += c->size();
+        for (const auto& chd : children) total += chd->size();
         return total;
     }
     void print(int indent) const override {
         std::cout << std::string(indent, ' ') << "📁 " << name << "/\n";
-        for (const auto& c : children) c->print(indent + 4);
+        for (const auto& chd : children) chd->print(indent + 4);
     }
 };
 
@@ -286,32 +290,34 @@ struct DripCoffee : Beverage {
 
 /// Base Decorator: wraps a Beverage, IS-A Beverage
 struct AddOnDecorator : Beverage {
-    explicit AddOnDecorator(std::unique_ptr<Beverage> b) : beverage_(std::move(b)) {}
+    explicit AddOnDecorator(std::unique_ptr<Beverage> bev) : m_beverage(std::move(bev)) {}
 
    protected:
-    std::unique_ptr<Beverage> beverage_;
+    std::unique_ptr<Beverage> m_beverage;
 };
 
 // Concrete Decorators
 struct Milk : AddOnDecorator {
-    explicit Milk(std::unique_ptr<Beverage> b) : AddOnDecorator(std::move(b)) {}
-    double      cost() const override { return beverage_->cost() + 0.30; }
-    std::string description() const override { return beverage_->description() + ", Milk"; }
+    explicit Milk(std::unique_ptr<Beverage> bev) : AddOnDecorator(std::move(bev)) {}
+    double      cost() const override { return m_beverage->cost() + 0.30; }
+    std::string description() const override { return m_beverage->description() + ", Milk"; }
 };
 struct VanillaSyrup : AddOnDecorator {
-    explicit VanillaSyrup(std::unique_ptr<Beverage> b) : AddOnDecorator(std::move(b)) {}
-    double      cost() const override { return beverage_->cost() + 0.50; }
-    std::string description() const override { return beverage_->description() + ", Vanilla"; }
+    explicit VanillaSyrup(std::unique_ptr<Beverage> bev) : AddOnDecorator(std::move(bev)) {}
+    double      cost() const override { return m_beverage->cost() + 0.50; }
+    std::string description() const override { return m_beverage->description() + ", Vanilla"; }
 };
 struct WhippedCream : AddOnDecorator {
-    explicit WhippedCream(std::unique_ptr<Beverage> b) : AddOnDecorator(std::move(b)) {}
-    double      cost() const override { return beverage_->cost() + 0.75; }
+    explicit WhippedCream(std::unique_ptr<Beverage> bev) : AddOnDecorator(std::move(bev)) {}
+    double      cost() const override { return m_beverage->cost() + 0.75; }
     std::string description() const override {
-        return beverage_->description() + ", Whipped Cream";
+        return m_beverage->description() + ", Whipped Cream";
     }
 };
 
-void printOrder(const Beverage& b) { std::cout << b.description() << " - $" << b.cost() << "\n"; }
+void printOrder(const Beverage& bev) {
+    std::cout << bev.description() << " - $" << bev.cost() << "\n";
+}
 
 void demo() {
     std::cout << "\n=== Decorator: Coffee Shop Order System ===\n";
@@ -362,12 +368,12 @@ namespace facade {
 // Subsystem classes - complex, fine-grained
 struct Amplifier {
     void on() { std::cout << "  Amplifier ON\n"; }
-    void setVolume(int v) { std::cout << "  Amplifier volume → " << v << "\n"; }
+    void setVolume(int vol) { std::cout << "  Amplifier volume → " << vol << "\n"; }
     void off() { std::cout << "  Amplifier OFF\n"; }
 };
 struct DVDPlayer {
     void on() { std::cout << "  DVD Player ON\n"; }
-    void play(const std::string& m) { std::cout << "  DVD playing: " << m << "\n"; }
+    void play(const std::string& mov) { std::cout << "  DVD playing: " << mov << "\n"; }
     void stop() { std::cout << "  DVD stopped\n"; }
     void off() { std::cout << "  DVD Player OFF\n"; }
 };
@@ -453,12 +459,12 @@ namespace flyweight {
 /// Flyweight: stores INTRINSIC (shared) state only
 struct TreeType {
     std::string species, texture, color;
-    TreeType(std::string s, std::string t, std::string c)
-        : species(std::move(s)), texture(std::move(t)), color(std::move(c)) {}
+    TreeType(std::string spc, std::string tex, std::string clr)
+        : species(std::move(spc)), texture(std::move(tex)), color(std::move(clr)) {}
 
-    // Extrinsic state (x, y) passed in - NOT stored here
-    void draw(int x, int y) const {
-        std::cout << "[" << species << "@(" << x << "," << y << ")] "
+    // Extrinsic state (posX, posY) passed in - NOT stored here
+    void draw(int posX, int posY) const {
+        std::cout << "[" << species << "@(" << posX << "," << posY << ")] "
                   << "color=" << color << " tex=" << texture << "\n";
     }
 };
@@ -471,8 +477,8 @@ struct TreeFactory {
         const std::string& species, const std::string& texture, const std::string& color
     ) {
         std::string key = species + "|" + texture + "|" + color;
-        auto        it  = pool.find(key);
-        if (it == pool.end()) {
+        auto        itr = pool.find(key);
+        if (itr == pool.end()) {
             std::cout << "  [Factory] Creating new TreeType: " << species << "\n";
             pool[key] = std::make_shared<TreeType>(species, texture, color);
         }
@@ -483,9 +489,9 @@ struct TreeFactory {
 
 /// Tree: a thin context object; holds position + reference to shared flyweight
 struct Tree {
-    int                       x, y;
+    int                       posX, posY;
     std::shared_ptr<TreeType> type;
-    void                      draw() const { type->draw(x, y); }
+    void                      draw() const { type->draw(posX, posY); }
 };
 
 void demo() {
@@ -499,14 +505,14 @@ void demo() {
     factory.getTreeType("Oak", "bark_oak.png",
                         "dark_green");  // returned from pool
 
-    for (auto [tx, ty] : std::vector<std::pair<int, int>> {{10, 20}, {30, 40}, {50, 10}})
-        forest.push_back({tx, ty, oak});
-    for (auto [tx, ty] : std::vector<std::pair<int, int>> {{15, 55}, {70, 30}, {5, 80}})
-        forest.push_back({tx, ty, pine});
+    for (auto [tpX, tpY] : std::vector<std::pair<int, int>> {{10, 20}, {30, 40}, {50, 10}})
+        forest.push_back({tpX, tpY, oak});
+    for (auto [tpX, tpY] : std::vector<std::pair<int, int>> {{15, 55}, {70, 30}, {5, 80}})
+        forest.push_back({tpX, tpY, pine});
 
     std::cout << "Drawing " << forest.size() << " trees using " << factory.typeCount()
               << " TreeType flyweights:\n";
-    for (const auto& t : forest) t.draw();
+    for (const auto& tre : forest) tre.draw();
 }
 
 }  // namespace flyweight
@@ -546,33 +552,34 @@ struct Image {
 /// Real Subject: expensive to construct
 struct RealImage : Image {
     std::string filename;
-    int         w_, h_;
-    explicit RealImage(std::string f) : filename(std::move(f)), w_(1920), h_(1080) {
+    int         m_width, m_height;
+    explicit RealImage(std::string fname)
+        : filename(std::move(fname)), m_width(1920), m_height(1080) {
         // Simulate slow disk load
         std::cout << "  [RealImage] Loading '" << filename << "' from disk...\n";
     }
     void draw() const override { std::cout << "  [RealImage] Drawing '" << filename << "'\n"; }
-    int  width() const override { return w_; }
-    int  height() const override { return h_; }
+    int  width() const override { return m_width; }
+    int  height() const override { return m_height; }
 };
 
 /// Virtual Proxy: same interface; defers RealImage creation
 struct ImageProxy : Image {
-    explicit ImageProxy(std::string f) : filename_(std::move(f)), real_(nullptr) {}
+    explicit ImageProxy(std::string fname) : m_filename(std::move(fname)), m_real(nullptr) {}
 
     void draw() const override {
-        if (!real_) {
+        if (!m_real) {
             std::cout << "  [Proxy] First draw - loading real image now\n";
-            real_ = std::make_unique<RealImage>(filename_);
+            m_real = std::make_unique<RealImage>(m_filename);
         }
-        real_->draw();
+        m_real->draw();
     }
     int width() const override { return 1920; }  // known without loading
     int height() const override { return 1080; }
 
    private:
-    std::string                        filename_;
-    mutable std::unique_ptr<RealImage> real_;  // lazily initialized
+    std::string                        m_filename;
+    mutable std::unique_ptr<RealImage> m_real;  // lazily initialized
 };
 
 void demo() {
@@ -600,6 +607,9 @@ void demo() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     adapter::demo();
     bridge::demo();
     composite::demo();

@@ -16,6 +16,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// PATTERN 1: ABSTRACT FACTORY
@@ -34,7 +38,7 @@
 ///   ✓ Client code should never call `new WindowsButton` directly.
 ///
 /// ALTERNATIVES RULED OUT:
-///   Factory Method alone: only handles one product per creator; can't enforce
+///   Factory Method alone: only handles one product per creator; can't enforces
 ///                          family consistency across Button + Checkbox
 ///                          together.
 ///   Direct if/else: spreads platform knowledge everywhere; nightmare
@@ -150,22 +154,22 @@ struct Computer {
 
 /// Builder interface: declares every possible construction step
 struct ComputerBuilder {
-    virtual void     setCPU(const std::string& cpu)   = 0;
-    virtual void     setRAM(const std::string& ram)   = 0;
-    virtual void     setStorage(const std::string& s) = 0;
-    virtual void     setGPU(const std::string& gpu)   = 0;
-    virtual Computer getResult()                      = 0;
-    virtual ~ComputerBuilder()                        = default;
+    virtual void     setCPU(const std::string& cpu)     = 0;
+    virtual void     setRAM(const std::string& ram)     = 0;
+    virtual void     setStorage(const std::string& str) = 0;
+    virtual void     setGPU(const std::string& gpu)     = 0;
+    virtual Computer getResult()                        = 0;
+    virtual ~ComputerBuilder()                          = default;
 };
 
 /// ConcreteBuilder: assembles parts into a Computer
 struct PCBuilder : ComputerBuilder {
-    Computer pc;
-    void     setCPU(const std::string& cpu) override { pc.cpu = cpu; }
-    void     setRAM(const std::string& ram) override { pc.ram = ram; }
-    void     setStorage(const std::string& s) override { pc.storage = s; }
-    void     setGPU(const std::string& gpu) override { pc.gpu = gpu; }
-    Computer getResult() override { return pc; }
+    Computer result;
+    void     setCPU(const std::string& cpu) override { result.cpu = cpu; }
+    void     setRAM(const std::string& ram) override { result.ram = ram; }
+    void     setStorage(const std::string& str) override { result.storage = str; }
+    void     setGPU(const std::string& gpu) override { result.gpu = gpu; }
+    Computer getResult() override { return result; }
 };
 
 /// Director: knows the correct order/steps for each configuration
@@ -188,16 +192,16 @@ struct Director {
 
 void demo() {
     std::cout << "\n=== Builder: Custom Computer Configurator ===\n";
-    PCBuilder b;
-    Director  d;
-    d.builder = &b;
+    PCBuilder bld;
+    Director  dir;
+    dir.builder = &bld;
 
-    d.buildGamingPC();
-    b.getResult().describe();
+    dir.buildGamingPC();
+    bld.getResult().describe();
 
-    b = {};  // reset builder for new configuration
-    d.buildServer();
-    b.getResult().describe();
+    bld = {};  // reset builder for new configuration
+    dir.buildServer();
+    bld.getResult().describe();
 }
 
 }  // namespace builder
@@ -250,9 +254,9 @@ struct Level {
     /// Template algorithm that uses the factory method
     void spawnWave(int count) const {
         std::cout << "Spawning wave of " << count << " enemies:\n";
-        for (int i = 0; i < count; ++i) {
-            auto e = createEnemy();
-            e->attack();
+        for (int idx = 0; idx < count; ++idx) {
+            auto enemy = createEnemy();
+            enemy->attack();
         }
     }
     virtual ~Level() = default;
@@ -338,12 +342,12 @@ struct SpellRegistry {
         registry[key] = std::move(spell);
     }
     std::unique_ptr<Spell> cast(const std::string& key) const {
-        auto it = registry.find(key);
-        if (it == registry.end()) {
+        auto itr = registry.find(key);
+        if (itr == registry.end()) {
             std::cerr << "Unknown spell: " << key << "\n";
             return nullptr;
         }
-        return it->second->clone();  // clone the prototype
+        return itr->second->clone();  // clone the prototype
     }
 };
 
@@ -352,16 +356,16 @@ void demo() {
     SpellRegistry reg;
 
     // Register prototype spells
-    auto fb      = std::make_unique<Fireball>();
-    fb->name     = "Fireball";
-    fb->damage   = 80;
-    fb->duration = 3;
-    auto is      = std::make_unique<IceStorm>();
-    is->name     = "Ice Storm";
-    is->damage   = 60;
-    is->duration = 7;
-    reg.registerSpell("fireball", std::move(fb));
-    reg.registerSpell("icestorm", std::move(is));
+    auto fbl         = std::make_unique<Fireball>();
+    fbl->name        = "Fireball";
+    fbl->damage      = 80;
+    fbl->duration    = 3;
+    auto iceStm      = std::make_unique<IceStorm>();
+    iceStm->name     = "Ice Storm";
+    iceStm->damage   = 60;
+    iceStm->duration = 7;
+    reg.registerSpell("fireball", std::move(fbl));
+    reg.registerSpell("icestorm", std::move(iceStm));
 
     // Cast = clone prototype and use
     auto cast1 = reg.cast("fireball");
@@ -459,6 +463,9 @@ void demo() {
 // ─────────────────────────────────────────────────────────────────────────────
 // -----------------------------------------------------------------------------
 int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     abstract_factory::demo();
     builder::demo();
     factory_method::demo();

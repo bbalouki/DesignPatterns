@@ -16,6 +16,10 @@
 #include <stack>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 /// ─────────────────────────────────────────────────────────────────────────────
 /// PATTERN 13: CHAIN OF RESPONSIBILITY
@@ -44,8 +48,8 @@ namespace chain_of_responsibility {
 
 enum class Severity { LOW = 1, MEDIUM = 2, HIGH = 3, CRITICAL = 4 };
 
-std::string severityName(Severity s) {
-    switch (s) {
+std::string severityName(Severity sev) {
+    switch (sev) {
         case Severity::LOW:
             return "LOW";
         case Severity::MEDIUM:
@@ -66,61 +70,61 @@ struct Ticket {
 struct SupportHandler {
     std::shared_ptr<SupportHandler> successor;
 
-    void setSuccessor(std::shared_ptr<SupportHandler> s) { successor = s; }
+    void setSuccessor(std::shared_ptr<SupportHandler> succ) { successor = succ; }
 
-    virtual void handle(const Ticket& t) {
+    virtual void handle(const Ticket& tkt) {
         if (successor)
-            successor->handle(t);
+            successor->handle(tkt);
         else
-            std::cout << "  [Unhandled] Ticket dropped: " << t.description << "\n";
+            std::cout << "  [Unhandled] Ticket dropped: " << tkt.description << "\n";
     }
     virtual ~SupportHandler() = default;
 };
 
 struct L1Agent : SupportHandler {
-    void handle(const Ticket& t) override {
-        if (t.severity == Severity::LOW) {
-            std::cout << "  [L1 Agent] Resolved '" << t.description << "'\n";
+    void handle(const Ticket& tkt) override {
+        if (tkt.severity == Severity::LOW) {
+            std::cout << "  [L1 Agent] Resolved '" << tkt.description << "'\n";
         } else {
-            std::cout << "  [L1 Agent] Escalating " << severityName(t.severity) << " ticket\n";
-            SupportHandler::handle(t);
+            std::cout << "  [L1 Agent] Escalating " << severityName(tkt.severity) << " ticket\n";
+            SupportHandler::handle(tkt);
         }
     }
 };
 struct L2Agent : SupportHandler {
-    void handle(const Ticket& t) override {
-        if (t.severity <= Severity::MEDIUM) {
-            std::cout << "  [L2 Agent] Resolved '" << t.description << "'\n";
+    void handle(const Ticket& tkt) override {
+        if (tkt.severity <= Severity::MEDIUM) {
+            std::cout << "  [L2 Agent] Resolved '" << tkt.description << "'\n";
         } else {
-            std::cout << "  [L2 Agent] Escalating " << severityName(t.severity) << " ticket\n";
-            SupportHandler::handle(t);
+            std::cout << "  [L2 Agent] Escalating " << severityName(tkt.severity) << " ticket\n";
+            SupportHandler::handle(tkt);
         }
     }
 };
 struct Manager : SupportHandler {
-    void handle(const Ticket& t) override {
-        if (t.severity <= Severity::HIGH) {
-            std::cout << "  [Manager] Resolved '" << t.description << "'\n";
+    void handle(const Ticket& tkt) override {
+        if (tkt.severity <= Severity::HIGH) {
+            std::cout << "  [Manager] Resolved '" << tkt.description << "'\n";
         } else {
             std::cout << "  [Manager] Escalating CRITICAL ticket to CTO\n";
-            SupportHandler::handle(t);
+            SupportHandler::handle(tkt);
         }
     }
 };
 struct CTO : SupportHandler {
-    void handle(const Ticket& t) override {
-        std::cout << "  [CTO] Personally handling CRITICAL: '" << t.description << "'\n";
+    void handle(const Ticket& tkt) override {
+        std::cout << "  [CTO] Personally handling CRITICAL: '" << tkt.description << "'\n";
     }
 };
 
 void demo() {
     std::cout << "\n=== Chain of Responsibility: Support Escalation ===\n";
-    auto l1  = std::make_shared<L1Agent>();
-    auto l2  = std::make_shared<L2Agent>();
-    auto mgr = std::make_shared<Manager>();
-    auto cto = std::make_shared<CTO>();
-    l1->setSuccessor(l2);
-    l2->setSuccessor(mgr);
+    auto lvl1 = std::make_shared<L1Agent>();
+    auto lvl2 = std::make_shared<L2Agent>();
+    auto mgr  = std::make_shared<Manager>();
+    auto cto  = std::make_shared<CTO>();
+    lvl1->setSuccessor(lvl2);
+    lvl2->setSuccessor(mgr);
     mgr->setSuccessor(cto);
 
     std::vector<Ticket> tickets = {
@@ -129,9 +133,10 @@ void demo() {
         {"Data loss on save", Severity::HIGH},
         {"Production database down", Severity::CRITICAL},
     };
-    for (const auto& t : tickets) {
-        std::cout << "Submitting [" << severityName(t.severity) << "]: " << t.description << "\n";
-        l1->handle(t);
+    for (const auto& tkt : tickets) {
+        std::cout << "Submitting [" << severityName(tkt.severity) << "]: " << tkt.description
+                  << "\n";
+        lvl1->handle(tkt);
     }
 }
 
@@ -162,20 +167,20 @@ namespace command {
 
 /// Receiver: knows how to perform the actual work
 struct SmartBulb {
-    bool on         = false;
+    bool isOn       = false;
     int  brightness = 100;
 
     void turnOn() {
-        on = true;
+        isOn = true;
         std::cout << "  [Bulb] ON  (brightness=" << brightness << ")\n";
     }
     void turnOff() {
-        on = false;
+        isOn = false;
         std::cout << "  [Bulb] OFF\n";
     }
-    void dim(int b) {
-        brightness = b;
-        std::cout << "  [Bulb] Dimmed to " << b << "%\n";
+    void dim(int brt) {
+        brightness = brt;
+        std::cout << "  [Bulb] Dimmed to " << brt << "%\n";
     }
 };
 
@@ -190,9 +195,9 @@ struct Command {
 struct TurnOnCommand : Command {
     SmartBulb& bulb;
     bool       wasOn;
-    explicit TurnOnCommand(SmartBulb& b) : bulb(b), wasOn(false) {}
+    explicit TurnOnCommand(SmartBulb& blb) : bulb(blb), wasOn(false) {}
     void execute() override {
-        wasOn = bulb.on;
+        wasOn = bulb.isOn;
         bulb.turnOn();
     }
     void undo() override {
@@ -203,9 +208,9 @@ struct TurnOnCommand : Command {
 struct TurnOffCommand : Command {
     SmartBulb& bulb;
     bool       wasOn;
-    explicit TurnOffCommand(SmartBulb& b) : bulb(b), wasOn(false) {}
+    explicit TurnOffCommand(SmartBulb& blb) : bulb(blb), wasOn(false) {}
     void execute() override {
-        wasOn = bulb.on;
+        wasOn = bulb.isOn;
         bulb.turnOff();
     }
     void undo() override {
@@ -216,7 +221,7 @@ struct TurnOffCommand : Command {
 struct DimCommand : Command {
     SmartBulb& bulb;
     int        newBrightness, prevBrightness;
-    DimCommand(SmartBulb& b, int level) : bulb(b), newBrightness(level), prevBrightness(100) {}
+    DimCommand(SmartBulb& blb, int level) : bulb(blb), newBrightness(level), prevBrightness(100) {}
     void execute() override {
         prevBrightness = bulb.brightness;
         bulb.dim(newBrightness);
@@ -227,12 +232,12 @@ struct DimCommand : Command {
 /// MacroCommand: Composite of Commands (executes/undoes several in sequence)
 struct MacroCommand : Command {
     std::vector<std::unique_ptr<Command>> commands;
-    void add(std::unique_ptr<Command> c) { commands.push_back(std::move(c)); }
+    void add(std::unique_ptr<Command> cmd) { commands.push_back(std::move(cmd)); }
     void execute() override {
-        for (auto& c : commands) c->execute();
+        for (auto& cmd : commands) cmd->execute();
     }
     void undo() override {
-        for (auto it = commands.rbegin(); it != commands.rend(); ++it) (*it)->undo();
+        for (auto itr = commands.rbegin(); itr != commands.rend(); ++itr) (*itr)->undo();
     }
 };
 
@@ -259,12 +264,12 @@ void demo() {
     SmartBulb bulb;
     Remote    remote;
 
-    TurnOnCommand  on(bulb);
+    TurnOnCommand  onCmd(bulb);
     DimCommand     dim(bulb, 40);
     TurnOffCommand off(bulb);
 
     std::cout << "Press ON:\n";
-    remote.press(on);
+    remote.press(onCmd);
     std::cout << "Press DIM 40:\n";
     remote.press(dim);
     std::cout << "UNDO dim:\n";
@@ -308,7 +313,7 @@ struct Expr {
 /// TerminalExpression: a literal number
 struct NumberExpr : Expr {
     int value;
-    explicit NumberExpr(int v) : value(v) {}
+    explicit NumberExpr(int val) : value(val) {}
     int         interpret() const override { return value; }
     std::string str() const override { return std::to_string(value); }
 };
@@ -316,8 +321,8 @@ struct NumberExpr : Expr {
 /// NonTerminalExpression: Add
 struct AddExpr : Expr {
     std::unique_ptr<Expr> left, right;
-    AddExpr(std::unique_ptr<Expr> l, std::unique_ptr<Expr> r)
-        : left(std::move(l)), right(std::move(r)) {}
+    AddExpr(std::unique_ptr<Expr> lhs, std::unique_ptr<Expr> rhs)
+        : left(std::move(lhs)), right(std::move(rhs)) {}
     int         interpret() const override { return left->interpret() + right->interpret(); }
     std::string str() const override { return "(" + left->str() + " + " + right->str() + ")"; }
 };
@@ -325,8 +330,8 @@ struct AddExpr : Expr {
 /// NonTerminalExpression: Subtract
 struct SubExpr : Expr {
     std::unique_ptr<Expr> left, right;
-    SubExpr(std::unique_ptr<Expr> l, std::unique_ptr<Expr> r)
-        : left(std::move(l)), right(std::move(r)) {}
+    SubExpr(std::unique_ptr<Expr> lhs, std::unique_ptr<Expr> rhs)
+        : left(std::move(lhs)), right(std::move(rhs)) {}
     int         interpret() const override { return left->interpret() - right->interpret(); }
     std::string str() const override { return "(" + left->str() + " - " + right->str() + ")"; }
 };
@@ -404,7 +409,7 @@ struct Playlist {
 struct ForwardIterator : PlaylistIterator {
     const std::vector<Song>& songs;
     size_t                   index = 0;
-    explicit ForwardIterator(const std::vector<Song>& s) : songs(s) {}
+    explicit ForwardIterator(const std::vector<Song>& src) : songs(src) {}
     bool hasNext() const override { return index < songs.size(); }
     Song next() override { return songs[index++]; }
 };
@@ -413,10 +418,10 @@ struct ForwardIterator : PlaylistIterator {
 struct ShuffleIterator : PlaylistIterator {
     std::vector<Song> shuffled;
     size_t            index = 0;
-    explicit ShuffleIterator(std::vector<Song> s) : shuffled(std::move(s)) {
+    explicit ShuffleIterator(std::vector<Song> src) : shuffled(std::move(src)) {
         // Simple deterministic shuffle for demo
-        for (int i = static_cast<int>(shuffled.size()) - 1; i > 0; --i)
-            std::swap(shuffled[i], shuffled[(i * 7 + 3) % (i + 1)]);
+        for (int idx = static_cast<int>(shuffled.size()) - 1; idx > 0; --idx)
+            std::swap(shuffled[idx], shuffled[(idx * 7 + 3) % (idx + 1)]);
     }
     bool hasNext() const override { return index < shuffled.size(); }
     Song next() override { return shuffled[index++]; }
@@ -429,11 +434,11 @@ std::unique_ptr<PlaylistIterator> Playlist::shuffleIterator() const {
     return std::make_unique<ShuffleIterator>(songs);
 }
 
-void play(PlaylistIterator& it, const std::string& mode) {
+void play(PlaylistIterator& itr, const std::string& mode) {
     std::cout << "[" << mode << " mode]\n";
-    while (it.hasNext()) {
-        auto s = it.next();
-        std::cout << "  ♪ " << s.title << " - " << s.artist << "\n";
+    while (itr.hasNext()) {
+        auto sng = itr.next();
+        std::cout << "  ♪ " << sng.title << " - " << sng.artist << "\n";
     }
 }
 
@@ -483,7 +488,7 @@ struct User;  // forward declaration
 /// Mediator interface
 struct ChatRoom {
     virtual void sendMessage(const std::string& msg, User* sender) = 0;
-    virtual void addUser(User* user)                               = 0;
+    virtual void addUser(User* usr)                                = 0;
     virtual ~ChatRoom()                                            = default;
 };
 
@@ -492,11 +497,11 @@ struct User {
     std::string name;
     ChatRoom*   room = nullptr;
 
-    explicit User(std::string n) : name(std::move(n)) {}
+    explicit User(std::string nam) : name(std::move(nam)) {}
 
-    void join(ChatRoom& r) {
-        room = &r;
-        r.addUser(this);
+    void join(ChatRoom& roo) {
+        room = &roo;
+        roo.addUser(this);
     }
 
     void send(const std::string& msg) {
@@ -513,12 +518,12 @@ struct User {
 struct GeneralChatRoom : ChatRoom {
     std::vector<User*> users;
 
-    void addUser(User* u) override { users.push_back(u); }
+    void addUser(User* usr) override { users.push_back(usr); }
 
     void sendMessage(const std::string& msg, User* sender) override {
-        for (User* u : users)
-            if (u != sender)
-                u->receive(msg, sender->name);
+        for (User* usr : users)
+            if (usr != sender)
+                usr->receive(msg, sender->name);
     }
 };
 
@@ -568,31 +573,31 @@ class TextEditor {
 
        private:
         std::string buffer;
-        explicit Snapshot(std::string b) : buffer(std::move(b)) {}
+        explicit Snapshot(std::string buf) : buffer(std::move(buf)) {}
     };
 
     void type(const std::string& text) {
-        buffer_ += text;
-        std::cout << "  Typed: \"" << text << "\" → buffer: \"" << buffer_ << "\"\n";
+        m_buffer += text;
+        std::cout << "  Typed: \"" << text << "\" → buffer: \"" << m_buffer << "\"\n";
     }
-    void deleteLast(size_t n) {
-        n = std::min(n, buffer_.size());
-        buffer_.erase(buffer_.size() - n);
-        std::cout << "  Deleted " << n << " chars → buffer: \"" << buffer_ << "\"\n";
+    void deleteLast(size_t num) {
+        num = std::min(num, m_buffer.size());
+        m_buffer.erase(m_buffer.size() - num);
+        std::cout << "  Deleted " << num << " chars → buffer: \"" << m_buffer << "\"\n";
     }
 
     Snapshot save() const {
         std::cout << "  [Editor] Snapshot saved\n";
-        return Snapshot(buffer_);
+        return Snapshot(m_buffer);
     }
     void restore(const Snapshot& snap) {
-        buffer_ = snap.buffer;
-        std::cout << "  [Editor] Restored → buffer: \"" << buffer_ << "\"\n";
+        m_buffer = snap.buffer;
+        std::cout << "  [Editor] Restored → buffer: \"" << m_buffer << "\"\n";
     }
-    const std::string& text() const { return buffer_; }
+    const std::string& text() const { return m_buffer; }
 
    private:
-    std::string buffer_;
+    std::string m_buffer;
 };
 
 /// Caretaker: holds snapshots; can't read their contents
@@ -600,26 +605,26 @@ struct History {
     std::stack<TextEditor::Snapshot> undoStack;
     std::stack<TextEditor::Snapshot> redoStack;
 
-    void save(TextEditor& e) {
-        undoStack.push(e.save());
+    void save(TextEditor& edt) {
+        undoStack.push(edt.save());
         while (!redoStack.empty()) redoStack.pop();  // clear redo on new edit
     }
-    void undo(TextEditor& e) {
+    void undo(TextEditor& edt) {
         if (undoStack.empty()) {
             std::cout << "  [History] Nothing to undo\n";
             return;
         }
-        redoStack.push(e.save());  // save current state for redo
-        e.restore(undoStack.top());
+        redoStack.push(edt.save());  // save current state for redo
+        edt.restore(undoStack.top());
         undoStack.pop();
     }
-    void redo(TextEditor& e) {
+    void redo(TextEditor& edt) {
         if (redoStack.empty()) {
             std::cout << "  [History] Nothing to redo\n";
             return;
         }
-        undoStack.push(e.save());
-        e.restore(redoStack.top());
+        undoStack.push(edt.save());
+        edt.restore(redoStack.top());
         redoStack.pop();
     }
 };
@@ -683,9 +688,9 @@ struct StockExchange {
     std::vector<StockObserver*>             observers;
     std::unordered_map<std::string, double> prices;
 
-    void attach(StockObserver* o) { observers.push_back(o); }
-    void detach(StockObserver* o) {
-        observers.erase(std::remove(observers.begin(), observers.end(), o), observers.end());
+    void attach(StockObserver* obs) { observers.push_back(obs); }
+    void detach(StockObserver* obs) {
+        observers.erase(std::remove(observers.begin(), observers.end(), obs), observers.end());
     }
 
     void setPrice(const std::string& ticker, double price) {
@@ -703,14 +708,14 @@ struct StockExchange {
 /// Concrete Observers
 struct InvestorDisplay : StockObserver {
     std::string name;
-    explicit InvestorDisplay(std::string n) : name(std::move(n)) {}
+    explicit InvestorDisplay(std::string nam) : name(std::move(nam)) {}
     void onPriceChange(const std::string& ticker, double price) override {
         std::cout << "  [" << name << "] Updated dashboard: " << ticker << " = $" << price << "\n";
     }
 };
 struct AlertBot : StockObserver {
     double threshold;
-    explicit AlertBot(double t) : threshold(t) {}
+    explicit AlertBot(double thr) : threshold(thr) {}
     void onPriceChange(const std::string& ticker, double price) override {
         if (price > threshold)
             std::cout << "  [AlertBot] 🚨 " << ticker << " exceeded $" << threshold << "! Now at $"
@@ -774,7 +779,7 @@ struct TrafficLight {
     TrafficLight();  // defined after states
     void tick() { state->tick(*this); }
     void display() { state->display(*this); }
-    void changeState(std::unique_ptr<LightState> s) { state = std::move(s); }
+    void changeState(std::unique_ptr<LightState> newState) { state = std::move(newState); }
 };
 
 struct RedState : LightState {
@@ -800,8 +805,8 @@ TrafficLight::TrafficLight() : state(std::make_unique<RedState>()) {}
 void demo() {
     std::cout << "\n=== State: Traffic Light ===\n";
     TrafficLight light;
-    for (int i = 0; i < 6; ++i) {
-        std::cout << "Tick " << i + 1 << ":\n";
+    for (int idx = 0; idx < 6; ++idx) {
+        std::cout << "Tick " << idx + 1 << ":\n";
         light.display();
         light.tick();
     }
@@ -842,45 +847,46 @@ struct SortStrategy {
 };
 
 struct BubbleSort : SortStrategy {
-    void sort(Vec& d) const override {
-        for (size_t i = 0; i < d.size(); ++i)
-            for (size_t j = 0; j + 1 < d.size() - i; ++j)
-                if (d[j] > d[j + 1])
-                    std::swap(d[j], d[j + 1]);
+    void sort(Vec& dat) const override {
+        for (size_t idx = 0; idx < dat.size(); ++idx)
+            for (size_t jdx = 0; jdx + 1 < dat.size() - idx; ++jdx)
+                if (dat[jdx] > dat[jdx + 1])
+                    std::swap(dat[jdx], dat[jdx + 1]);
     }
     std::string name() const override { return "BubbleSort"; }
 };
 
 struct QuickSort : SortStrategy {
-    void sort(Vec& d) const override { qsort(d, 0, (int)d.size() - 1); }
-    void qsort(Vec& d, int l, int r) const {
-        if (l >= r)
+    void sort(Vec& dat) const override { qsort(dat, 0, (int)dat.size() - 1); }
+    void qsort(Vec& dat, int lft, int rgt) const {
+        if (lft >= rgt)
             return;
-        int pivot = d[r], i = l - 1;
-        for (int j = l; j < r; ++j)
-            if (d[j] <= pivot)
-                std::swap(d[++i], d[j]);
-        std::swap(d[++i], d[r]);
-        qsort(d, l, i - 1);
-        qsort(d, i + 1, r);
+        int pivot = dat[rgt], idx = lft - 1;
+        for (int jdx = lft; jdx < rgt; ++jdx)
+            if (dat[jdx] <= pivot)
+                std::swap(dat[++idx], dat[jdx]);
+        std::swap(dat[++idx], dat[rgt]);
+        qsort(dat, lft, idx - 1);
+        qsort(dat, idx + 1, rgt);
     }
     std::string name() const override { return "QuickSort"; }
 };
 
 struct MergeSort : SortStrategy {
-    void sort(Vec& d) const override { mergeSort(d, 0, (int)d.size() - 1); }
-    void mergeSort(Vec& d, int l, int r) const {
-        if (l >= r)
+    void sort(Vec& dat) const override { mergeSort(dat, 0, (int)dat.size() - 1); }
+    void mergeSort(Vec& dat, int lft, int rgt) const {
+        if (lft >= rgt)
             return;
-        int m = (l + r) / 2;
-        mergeSort(d, l, m);
-        mergeSort(d, m + 1, r);
+        int mid = (lft + rgt) / 2;
+        mergeSort(dat, lft, mid);
+        mergeSort(dat, mid + 1, rgt);
         Vec tmp;
-        int i = l, j = m + 1;
-        while (i <= m && j <= r) tmp.push_back(d[i] <= d[j] ? d[i++] : d[j++]);
-        while (i <= m) tmp.push_back(d[i++]);
-        while (j <= r) tmp.push_back(d[j++]);
-        for (int k = l; k <= r; ++k) d[k] = tmp[k - l];
+        int idx = lft, jdx = mid + 1;
+        while (idx <= mid && jdx <= rgt)
+            tmp.push_back(dat[idx] <= dat[jdx] ? dat[idx++] : dat[jdx++]);
+        while (idx <= mid) tmp.push_back(dat[idx++]);
+        while (jdx <= rgt) tmp.push_back(dat[jdx++]);
+        for (int kdx = lft; kdx <= rgt; ++kdx) dat[kdx] = tmp[kdx - lft];
     }
     std::string name() const override { return "MergeSort"; }
 };
@@ -889,22 +895,22 @@ struct MergeSort : SortStrategy {
 struct DataSorter {
     std::unique_ptr<SortStrategy> strategy;
 
-    void setStrategy(std::unique_ptr<SortStrategy> s) { strategy = std::move(s); }
+    void setStrategy(std::unique_ptr<SortStrategy> strat) { strategy = std::move(strat); }
 
     void sort(Vec& data) {
         std::cout << "  Sorting " << data.size() << " items with " << strategy->name() << ":\n";
         strategy->sort(data);
         std::cout << "  Result: ";
-        for (int v : data) std::cout << v << " ";
+        for (int val : data) std::cout << val << " ";
         std::cout << "\n";
     }
 };
 
 /// Smart selector: pick algorithm based on data characteristics
-std::unique_ptr<SortStrategy> selectStrategy(size_t n) {
-    if (n <= 8)
+std::unique_ptr<SortStrategy> selectStrategy(size_t num) {
+    if (num <= 8)
         return std::make_unique<BubbleSort>();
-    if (n <= 100)
+    if (num <= 100)
         return std::make_unique<QuickSort>();
     return std::make_unique<MergeSort>();
 }
@@ -913,9 +919,9 @@ void demo() {
     std::cout << "\n=== Strategy: Sorting Algorithm Selector ===\n";
     DataSorter sorter;
 
-    Vec small = {5, 2, 8, 1};
-    sorter.setStrategy(selectStrategy(small.size()));
-    sorter.sort(small);
+    Vec tiny = {5, 2, 8, 1};
+    sorter.setStrategy(selectStrategy(tiny.size()));
+    sorter.sort(tiny);
 
     Vec medium = {64, 25, 12, 22, 11, 90, 3, 47, 80, 55};
     sorter.setStrategy(selectStrategy(medium.size()));
@@ -964,8 +970,8 @@ struct ReportGenerator {
 
    protected:
     /// Invariant steps (concrete in base)
-    std::string fetchData(const std::string& t) {
-        std::cout << "  [Base] Fetching data for: " << t << "\n";
+    std::string fetchData(const std::string& title) {
+        std::cout << "  [Base] Fetching data for: " << title << "\n";
         return "row1|col1|col2\nrow2|col3|col4";
     }
     void saveFile(const std::string& output) {
@@ -984,9 +990,9 @@ struct CSVReport : ReportGenerator {
     std::vector<std::string> parseData(const std::string& raw) override {
         std::cout << "  [CSV] Parsing raw data\n";
         std::vector<std::string> rows;
-        std::istringstream       ss(raw);
+        std::istringstream       iss(raw);
         std::string              line;
-        while (std::getline(ss, line)) rows.push_back(line);
+        while (std::getline(iss, line)) rows.push_back(line);
         return rows;
     }
     std::string formatOutput(
@@ -994,8 +1000,8 @@ struct CSVReport : ReportGenerator {
     ) override {
         std::cout << "  [CSV] Formatting as CSV\n";
         std::string out = "# " + title + "\n";
-        for (const auto& r : rows) {
-            auto row = r;
+        for (const auto& rawRow : rows) {
+            auto row = rawRow;
             std::replace(row.begin(), row.end(), '|', ',');
             out += row + "\n";
         }
@@ -1008,9 +1014,9 @@ struct HTMLReport : ReportGenerator {
     std::vector<std::string> parseData(const std::string& raw) override {
         std::cout << "  [HTML] Parsing raw data\n";
         std::vector<std::string> rows;
-        std::istringstream       ss(raw);
+        std::istringstream       iss(raw);
         std::string              line;
-        while (std::getline(ss, line)) rows.push_back(line);
+        while (std::getline(iss, line)) rows.push_back(line);
         return rows;
     }
     std::string formatOutput(
@@ -1018,7 +1024,7 @@ struct HTMLReport : ReportGenerator {
     ) override {
         std::cout << "  [HTML] Formatting as HTML\n";
         std::string out = "<h1>" + title + "</h1><table>";
-        for (const auto& r : rows) out += "<tr><td>" + r + "</td></tr>";
+        for (const auto& row : rows) out += "<tr><td>" + row + "</td></tr>";
         out += "</table>";
         return out;
     }
@@ -1071,67 +1077,67 @@ struct Food;
 
 /// Visitor interface: one Visit method per element type
 struct CartVisitor {
-    virtual void visit(const Electronics& e) = 0;
-    virtual void visit(const Food& f)        = 0;
-    virtual ~CartVisitor()                   = default;
+    virtual void visit(const Electronics& ele) = 0;
+    virtual void visit(const Food& fod)        = 0;
+    virtual ~CartVisitor()                     = default;
 };
 
 /// Element interface
 struct CartItem {
     std::string name;
     double      price;
-    CartItem(std::string n, double p) : name(std::move(n)), price(p) {}
-    virtual void accept(CartVisitor& v) const = 0;
-    virtual ~CartItem()                       = default;
+    CartItem(std::string nam, double prc) : name(std::move(nam)), price(prc) {}
+    virtual void accept(CartVisitor& vis) const = 0;
+    virtual ~CartItem()                         = default;
 };
 
 /// Concrete Elements
 struct Electronics : CartItem {
     using CartItem::CartItem;
-    void accept(CartVisitor& v) const override { v.visit(*this); }
+    void accept(CartVisitor& vis) const override { vis.visit(*this); }
 };
 struct Food : CartItem {
     using CartItem::CartItem;
-    void accept(CartVisitor& v) const override { v.visit(*this); }
+    void accept(CartVisitor& vis) const override { vis.visit(*this); }
 };
 
 /// Concrete Visitor 1: Calculate total price
 struct PriceVisitor : CartVisitor {
     double total = 0;
-    void   visit(const Electronics& e) override {
-        total += e.price;
-        std::cout << "  Electronics: " << e.name << " $" << e.price << "\n";
+    void   visit(const Electronics& ele) override {
+        total += ele.price;
+        std::cout << "  Electronics: " << ele.name << " $" << ele.price << "\n";
     }
-    void visit(const Food& f) override {
-        total += f.price;
-        std::cout << "  Food:        " << f.name << " $" << f.price << "\n";
+    void visit(const Food& fod) override {
+        total += fod.price;
+        std::cout << "  Food:        " << fod.name << " $" << fod.price << "\n";
     }
 };
 
 /// Concrete Visitor 2: Calculate tax (Electronics 15%, Food 5%)
 struct TaxVisitor : CartVisitor {
     double totalTax = 0;
-    void   visit(const Electronics& e) override {
-        double tax = e.price * 0.15;
+    void   visit(const Electronics& ele) override {
+        double tax = ele.price * 0.15;
         totalTax += tax;
-        std::cout << "  Electronics tax (" << e.name << "): $" << tax << " (15%)\n";
+        std::cout << "  Electronics tax (" << ele.name << "): $" << tax << " (15%)\n";
     }
-    void visit(const Food& f) override {
-        double tax = f.price * 0.05;
+    void visit(const Food& fod) override {
+        double tax = fod.price * 0.05;
         totalTax += tax;
-        std::cout << "  Food tax (" << f.name << "): $" << tax << " (5%)\n";
+        std::cout << "  Food tax (" << fod.name << "): $" << tax << " (5%)\n";
     }
 };
 
 /// Concrete Visitor 3: Apply discounts (Electronics 10% off, Food no discount)
 struct DiscountVisitor : CartVisitor {
     double totalSaved = 0;
-    void   visit(const Electronics& e) override {
-        double saved = e.price * 0.10;
+    void   visit(const Electronics& ele) override {
+        double saved = ele.price * 0.10;
         totalSaved += saved;
-        std::cout << "  Electronics discount (" << e.name << "): -$" << saved << " (10% off)\n";
+        std::cout << "  Electronics discount (" << ele.name << "): -$" << saved << " (10% off)\n";
     }
-    void visit(const Food& f) override { std::cout << "  No discount on " << f.name << "\n"; }
+    void visit(const Food& fod) override { std::cout << "  No discount on " << fod.name << "\n"; }
 };
 
 void demo() {
@@ -1143,25 +1149,28 @@ void demo() {
     cart.push_back(std::make_unique<Food>("Coffee Beans", 24.00));
 
     std::cout << "\n-- Price Breakdown --\n";
-    PriceVisitor pv;
-    for (const auto& item : cart) item->accept(pv);
-    std::cout << "  Total: $" << pv.total << "\n";
+    PriceVisitor prv;
+    for (const auto& item : cart) item->accept(prv);
+    std::cout << "  Total: $" << prv.total << "\n";
 
     std::cout << "\n-- Tax Calculation --\n";
-    TaxVisitor tv;
-    for (const auto& item : cart) item->accept(tv);
-    std::cout << "  Total Tax: $" << tv.totalTax << "\n";
+    TaxVisitor taxV;
+    for (const auto& item : cart) item->accept(taxV);
+    std::cout << "  Total Tax: $" << taxV.totalTax << "\n";
 
     std::cout << "\n-- Discounts Applied --\n";
-    DiscountVisitor dv;
-    for (const auto& item : cart) item->accept(dv);
-    std::cout << "  Total Saved: $" << dv.totalSaved << "\n";
+    DiscountVisitor dscV;
+    for (const auto& item : cart) item->accept(dscV);
+    std::cout << "  Total Saved: $" << dscV.totalSaved << "\n";
 }
 
 }  // namespace visitor
 
 // ─────────────────────────────────────────────────────────────────────────────
 int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     chain_of_responsibility::demo();
     command::demo();
     interpreter::demo();
