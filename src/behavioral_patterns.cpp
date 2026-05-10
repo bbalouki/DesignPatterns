@@ -1,0 +1,1178 @@
+// =============================================================================
+// BEHAVIORAL PATTERNS — C++ Implementations
+// Based on: Design Patterns: Elements of Reusable Object-Oriented Software
+//           Erich Gamma, Richard Helm, Ralph Johnson, John Vlissides (GoF)
+//
+// Patterns covered (11):
+//   Chain of Responsibility, Command, Interpreter, Iterator, Mediator,
+//   Memento, Observer, State, Strategy, Template Method, Visitor
+// =============================================================================
+
+#include <algorithm>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <stack>
+#include <string>
+#include <vector>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 13: CHAIN OF RESPONSIBILITY
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Customer Support Ticket Escalation
+//   Support tickets have severity levels (LOW, MEDIUM, HIGH, CRITICAL).
+//   Level-1 agents handle LOW, L2 handles up to MEDIUM, Manager handles HIGH,
+//   CTO handles CRITICAL. A ticket bubbles up the chain until handled.
+//   Ticket routing rules can change without altering any handler.
+//
+// WHY CHAIN OF RESPONSIBILITY?
+//   ✓ More than one handler can process the request, and the right one
+//     isn't known until runtime.
+//   ✓ We want to add/remove handlers (new tier between L2 and Manager) by
+//     just rewiring the chain — no handler needs to change.
+//   ✓ The sender (ticket submission system) need not know WHO will handle it.
+//
+// ALTERNATIVES RULED OUT:
+//   Switch/if-else — hard-codes routing; every new tier breaks the code.
+//   Command+Registry — overkill; we need sequential search, not lookup.
+//
+// KEY LIABILITY: A ticket might fall off the end unhandled. We add a catch-all.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace chain_of_responsibility {
+
+enum class Severity { LOW = 1, MEDIUM = 2, HIGH = 3, CRITICAL = 4 };
+
+std::string severityName(Severity s) {
+    switch (s) {
+        case Severity::LOW:
+            return "LOW";
+        case Severity::MEDIUM:
+            return "MEDIUM";
+        case Severity::HIGH:
+            return "HIGH";
+        case Severity::CRITICAL:
+            return "CRITICAL";
+    }
+    return "?";
+}
+
+struct Ticket {
+    std::string description;
+    Severity    severity;
+};
+
+struct SupportHandler {
+    std::shared_ptr<SupportHandler> successor;
+
+    void setSuccessor(std::shared_ptr<SupportHandler> s) { successor = s; }
+
+    virtual void handle(const Ticket& t) {
+        if (successor)
+            successor->handle(t);
+        else
+            std::cout << "  [Unhandled] Ticket dropped: " << t.description << "\n";
+    }
+    virtual ~SupportHandler() = default;
+};
+
+struct L1Agent : SupportHandler {
+    void handle(const Ticket& t) override {
+        if (t.severity == Severity::LOW) {
+            std::cout << "  [L1 Agent] Resolved '" << t.description << "'\n";
+        } else {
+            std::cout << "  [L1 Agent] Escalating " << severityName(t.severity) << " ticket\n";
+            SupportHandler::handle(t);
+        }
+    }
+};
+struct L2Agent : SupportHandler {
+    void handle(const Ticket& t) override {
+        if (t.severity <= Severity::MEDIUM) {
+            std::cout << "  [L2 Agent] Resolved '" << t.description << "'\n";
+        } else {
+            std::cout << "  [L2 Agent] Escalating " << severityName(t.severity) << " ticket\n";
+            SupportHandler::handle(t);
+        }
+    }
+};
+struct Manager : SupportHandler {
+    void handle(const Ticket& t) override {
+        if (t.severity <= Severity::HIGH) {
+            std::cout << "  [Manager] Resolved '" << t.description << "'\n";
+        } else {
+            std::cout << "  [Manager] Escalating CRITICAL ticket to CTO\n";
+            SupportHandler::handle(t);
+        }
+    }
+};
+struct CTO : SupportHandler {
+    void handle(const Ticket& t) override {
+        std::cout << "  [CTO] Personally handling CRITICAL: '" << t.description << "'\n";
+    }
+};
+
+void demo() {
+    std::cout << "\n=== Chain of Responsibility: Support Escalation ===\n";
+    auto l1  = std::make_shared<L1Agent>();
+    auto l2  = std::make_shared<L2Agent>();
+    auto mgr = std::make_shared<Manager>();
+    auto cto = std::make_shared<CTO>();
+    l1->setSuccessor(l2);
+    l2->setSuccessor(mgr);
+    mgr->setSuccessor(cto);
+
+    std::vector<Ticket> tickets = {
+        {"Password reset", Severity::LOW},
+        {"Billing discrepancy", Severity::MEDIUM},
+        {"Data loss on save", Severity::HIGH},
+        {"Production database down", Severity::CRITICAL},
+    };
+    for (const auto& t : tickets) {
+        std::cout << "Submitting [" << severityName(t.severity) << "]: " << t.description << "\n";
+        l1->handle(t);
+    }
+}
+
+}  // namespace chain_of_responsibility
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 14: COMMAND
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Smart Bulb Remote with Undo
+//   A smart home remote has buttons that can turn a bulb on/off, or dim it.
+//   Each button action must be undoable. Actions should be loggable and
+//   potentially scriptable. The remote (Invoker) shouldn't know how bulbs work.
+//
+// WHY COMMAND?
+//   ✓ Decouples the remote (Invoker) from the bulb (Receiver).
+//   ✓ Undo: each Command stores enough state to reverse itself.
+//   ✓ Commands are first-class objects: they can be stored in a history list,
+//     logged to disk, or composed into MacroCommands.
+//
+// ALTERNATIVES RULED OUT:
+//   Direct method calls — the remote directly calls bulb.on(); can't undo,
+//                         can't log, can't queue for later execution.
+//   Lambda callbacks   — simpler in modern C++ but can't implement Undo()
+//                         without extra state capture; Command is cleaner.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace command {
+
+// Receiver — knows how to perform the actual work
+struct SmartBulb {
+    bool on         = false;
+    int  brightness = 100;
+
+    void turnOn() {
+        on = true;
+        std::cout << "  [Bulb] ON  (brightness=" << brightness << ")\n";
+    }
+    void turnOff() {
+        on = false;
+        std::cout << "  [Bulb] OFF\n";
+    }
+    void dim(int b) {
+        brightness = b;
+        std::cout << "  [Bulb] Dimmed to " << b << "%\n";
+    }
+};
+
+// Command interface
+struct Command {
+    virtual void execute() = 0;
+    virtual void undo()    = 0;
+    virtual ~Command()     = default;
+};
+
+// Concrete Commands — each binds a Receiver with specific parameters
+struct TurnOnCommand : Command {
+    SmartBulb& bulb;
+    bool       wasOn;
+    explicit TurnOnCommand(SmartBulb& b) : bulb(b), wasOn(false) {}
+    void execute() override {
+        wasOn = bulb.on;
+        bulb.turnOn();
+    }
+    void undo() override {
+        if (!wasOn)
+            bulb.turnOff();
+    }
+};
+struct TurnOffCommand : Command {
+    SmartBulb& bulb;
+    bool       wasOn;
+    explicit TurnOffCommand(SmartBulb& b) : bulb(b), wasOn(false) {}
+    void execute() override {
+        wasOn = bulb.on;
+        bulb.turnOff();
+    }
+    void undo() override {
+        if (wasOn)
+            bulb.turnOn();
+    }
+};
+struct DimCommand : Command {
+    SmartBulb& bulb;
+    int        newBrightness, prevBrightness;
+    DimCommand(SmartBulb& b, int level) : bulb(b), newBrightness(level), prevBrightness(100) {}
+    void execute() override {
+        prevBrightness = bulb.brightness;
+        bulb.dim(newBrightness);
+    }
+    void undo() override { bulb.dim(prevBrightness); }
+};
+
+// MacroCommand — Composite of Commands (executes/undoes several in sequence)
+struct MacroCommand : Command {
+    std::vector<std::unique_ptr<Command>> commands;
+    void add(std::unique_ptr<Command> c) { commands.push_back(std::move(c)); }
+    void execute() override {
+        for (auto& c : commands) c->execute();
+    }
+    void undo() override {
+        for (auto it = commands.rbegin(); it != commands.rend(); ++it) (*it)->undo();
+    }
+};
+
+// Invoker — stores and executes commands; maintains undo history
+struct Remote {
+    std::stack<Command*> history;
+
+    void press(Command& cmd) {
+        cmd.execute();
+        history.push(&cmd);
+    }
+    void pressUndo() {
+        if (!history.empty()) {
+            history.top()->undo();
+            history.pop();
+        } else {
+            std::cout << "  [Remote] Nothing to undo\n";
+        }
+    }
+};
+
+void demo() {
+    std::cout << "\n=== Command: Smart Bulb Remote with Undo ===\n";
+    SmartBulb bulb;
+    Remote    remote;
+
+    TurnOnCommand  on(bulb);
+    DimCommand     dim(bulb, 40);
+    TurnOffCommand off(bulb);
+
+    std::cout << "Press ON:\n";
+    remote.press(on);
+    std::cout << "Press DIM 40:\n";
+    remote.press(dim);
+    std::cout << "UNDO dim:\n";
+    remote.pressUndo();
+    std::cout << "UNDO on:\n";
+    remote.pressUndo();
+    std::cout << "UNDO (empty):\n";
+    remote.pressUndo();
+}
+
+}  // namespace command
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 15: INTERPRETER
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Simple Arithmetic Expression Evaluator
+//   A configuration or rule engine needs to evaluate expressions like
+//   "3 + 4 - 2". The grammar has 3 rules: Number, Add, Subtract.
+//   Each rule becomes a class; the expression is parsed into an AST,
+//   then evaluated recursively via Interpret().
+//
+// WHY INTERPRETER?
+//   ✓ The grammar is very simple (≤ 5 rules: Number, Add, Subtract).
+//   ✓ We want to add new operations (e.g., Multiply) by adding one class.
+//   ✓ The AST = Composite, so Interpreter extends Composite naturally.
+//
+// WHEN NOT TO USE:
+//   Complex grammars (10+ rules) → use ANTLR or a proper parser generator.
+//   Hot evaluation path → compile to bytecode instead.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace interpreter {
+
+// AbstractExpression
+struct Expr {
+    virtual int         interpret() const = 0;
+    virtual std::string str() const       = 0;
+    virtual ~Expr()                       = default;
+};
+
+// TerminalExpression — a literal number
+struct NumberExpr : Expr {
+    int value;
+    explicit NumberExpr(int v) : value(v) {}
+    int         interpret() const override { return value; }
+    std::string str() const override { return std::to_string(value); }
+};
+
+// NonTerminalExpression — Add
+struct AddExpr : Expr {
+    std::unique_ptr<Expr> left, right;
+    AddExpr(std::unique_ptr<Expr> l, std::unique_ptr<Expr> r)
+        : left(std::move(l)), right(std::move(r)) {}
+    int         interpret() const override { return left->interpret() + right->interpret(); }
+    std::string str() const override { return "(" + left->str() + " + " + right->str() + ")"; }
+};
+
+// NonTerminalExpression — Subtract
+struct SubExpr : Expr {
+    std::unique_ptr<Expr> left, right;
+    SubExpr(std::unique_ptr<Expr> l, std::unique_ptr<Expr> r)
+        : left(std::move(l)), right(std::move(r)) {}
+    int         interpret() const override { return left->interpret() - right->interpret(); }
+    std::string str() const override { return "(" + left->str() + " - " + right->str() + ")"; }
+};
+
+void demo() {
+    std::cout << "\n=== Interpreter: Arithmetic Expression Evaluator ===\n";
+
+    // Build AST for: ((3 + 4) - 2)
+    auto expr = std::make_unique<SubExpr>(
+        std::make_unique<AddExpr>(std::make_unique<NumberExpr>(3), std::make_unique<NumberExpr>(4)),
+        std::make_unique<NumberExpr>(2)
+    );
+
+    std::cout << "Expression: " << expr->str() << "\n";
+    std::cout << "Result:     " << expr->interpret() << "\n";
+
+    // ((10 - 3) + (2 + 1)) = 10
+    auto expr2 = std::make_unique<AddExpr>(
+        std::make_unique<SubExpr>(
+            std::make_unique<NumberExpr>(10), std::make_unique<NumberExpr>(3)
+        ),
+        std::make_unique<AddExpr>(std::make_unique<NumberExpr>(2), std::make_unique<NumberExpr>(1))
+    );
+    std::cout << "Expression: " << expr2->str() << " = " << expr2->interpret() << "\n";
+}
+
+}  // namespace interpreter
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 16: ITERATOR
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Music Playlist with Multiple Traversal Modes
+//   A Playlist stores songs. Users want to traverse it in two ways: forward
+//   (normal play) and shuffled (random play). Multiple iterators can run
+//   simultaneously without interfering. The Playlist doesn't expose its
+//   internal vector directly.
+//
+// WHY ITERATOR?
+//   ✓ The aggregate (Playlist) must not expose its internal representation.
+//   ✓ We need multiple simultaneous traversal strategies (forward, shuffle).
+//   ✓ Uniform interface — client code works with any Iterator.
+//
+// NOTE: Modern C++ has range-for and std::begin/end, which embed this pattern.
+//   We implement it from scratch to understand the structure. In real code,
+//   you'd expose begin()/end() and implement operator++ for range-for support.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace iterator {
+
+struct Song {
+    std::string title, artist;
+};
+
+// Iterator interface
+struct PlaylistIterator {
+    virtual bool hasNext() const = 0;
+    virtual Song next()          = 0;
+    virtual ~PlaylistIterator()  = default;
+};
+
+// Aggregate
+struct Playlist {
+    std::vector<Song> songs;
+
+    void addSong(std::string title, std::string artist) {
+        songs.push_back({std::move(title), std::move(artist)});
+    }
+
+    // Factory Method — creates the right iterator
+    std::unique_ptr<PlaylistIterator> forwardIterator() const;
+    std::unique_ptr<PlaylistIterator> shuffleIterator() const;
+};
+
+// Concrete Iterator — forward
+struct ForwardIterator : PlaylistIterator {
+    const std::vector<Song>& songs;
+    size_t                   index = 0;
+    explicit ForwardIterator(const std::vector<Song>& s) : songs(s) {}
+    bool hasNext() const override { return index < songs.size(); }
+    Song next() override { return songs[index++]; }
+};
+
+// Concrete Iterator — shuffle (Fisher-Yates at creation)
+struct ShuffleIterator : PlaylistIterator {
+    std::vector<Song> shuffled;
+    size_t            index = 0;
+    explicit ShuffleIterator(std::vector<Song> s) : shuffled(std::move(s)) {
+        // Simple deterministic shuffle for demo
+        for (int i = static_cast<int>(shuffled.size()) - 1; i > 0; --i)
+            std::swap(shuffled[i], shuffled[(i * 7 + 3) % (i + 1)]);
+    }
+    bool hasNext() const override { return index < shuffled.size(); }
+    Song next() override { return shuffled[index++]; }
+};
+
+std::unique_ptr<PlaylistIterator> Playlist::forwardIterator() const {
+    return std::make_unique<ForwardIterator>(songs);
+}
+std::unique_ptr<PlaylistIterator> Playlist::shuffleIterator() const {
+    return std::make_unique<ShuffleIterator>(songs);
+}
+
+void play(PlaylistIterator& it, const std::string& mode) {
+    std::cout << "[" << mode << " mode]\n";
+    while (it.hasNext()) {
+        auto s = it.next();
+        std::cout << "  ♪ " << s.title << " — " << s.artist << "\n";
+    }
+}
+
+void demo() {
+    std::cout << "\n=== Iterator: Music Playlist Traversal ===\n";
+    Playlist playlist;
+    playlist.addSong("Bohemian Rhapsody", "Queen");
+    playlist.addSong("Hotel California", "Eagles");
+    playlist.addSong("Stairway to Heaven", "Led Zeppelin");
+    playlist.addSong("Imagine", "John Lennon");
+
+    auto fwd = playlist.forwardIterator();
+    play(*fwd, "Forward");
+
+    auto shuf = playlist.shuffleIterator();
+    play(*shuf, "Shuffle");
+}
+
+}  // namespace iterator
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 17: MEDIATOR
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Chat Room
+//   Users in a chat room need to send messages to each other. Without a
+//   Mediator, User A would hold a reference to User B, C, D… and vice versa —
+//   a dense many-to-many mesh that makes users tightly coupled to each other.
+//   The ChatRoom (Mediator) centralizes all communication.
+//
+// WHY MEDIATOR?
+//   ✓ N users would otherwise have N*(N-1) references to each other.
+//   ✓ Each user knows only the ChatRoom — you can add a new user or change
+//     broadcast logic without touching any User class.
+//   ✓ The Mediator makes communication explicit and centralizable.
+//
+// MEDIATOR vs OBSERVER:
+//   Observer: Subject broadcasts to all Observers (one-to-many).
+//   Mediator: Any colleague can trigger coordination (many-to-many → one hub).
+//   They're often used together: Colleagues use Observer to notify the
+//   Mediator.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace mediator {
+
+struct User;  // forward declaration
+
+// Mediator interface
+struct ChatRoom {
+    virtual void sendMessage(const std::string& msg, User* sender) = 0;
+    virtual void addUser(User* user)                               = 0;
+    virtual ~ChatRoom()                                            = default;
+};
+
+// Colleague — knows only the Mediator
+struct User {
+    std::string name;
+    ChatRoom*   room = nullptr;
+
+    explicit User(std::string n) : name(std::move(n)) {}
+
+    void join(ChatRoom& r) {
+        room = &r;
+        r.addUser(this);
+    }
+
+    void send(const std::string& msg) {
+        std::cout << "[" << name << "] sends: " << msg << "\n";
+        if (room)
+            room->sendMessage(msg, this);
+    }
+    void receive(const std::string& msg, const std::string& from) {
+        std::cout << "  -> [" << name << "] receives from " << from << ": " << msg << "\n";
+    }
+};
+
+// Concrete Mediator
+struct GeneralChatRoom : ChatRoom {
+    std::vector<User*> users;
+
+    void addUser(User* u) override { users.push_back(u); }
+
+    void sendMessage(const std::string& msg, User* sender) override {
+        for (User* u : users)
+            if (u != sender)
+                u->receive(msg, sender->name);
+    }
+};
+
+void demo() {
+    std::cout << "\n=== Mediator: Chat Room ===\n";
+    GeneralChatRoom room;
+    User            alice("Alice"), bob("Bob"), carol("Carol");
+    alice.join(room);
+    bob.join(room);
+    carol.join(room);
+
+    alice.send("Hey everyone!");
+    bob.send("Hi Alice and Carol!");
+}
+
+}  // namespace mediator
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 18: MEMENTO
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Text Editor with Undo/Redo
+//   A text editor lets users type and delete text. The user must be able to
+//   undo and redo changes. The editor's internal state (the text buffer) must
+//   be snapshotted without exposing its internals to the undo manager.
+//
+// WHY MEMENTO?
+//   ✓ We need to capture and externalize the Editor's state (the text buffer).
+//   ✓ Encapsulation must be preserved — the Caretaker (History) must NOT be
+//     able to inspect or modify the stored state.
+//   ✓ This separates "what to store" (Originator's responsibility) from
+//     "when/how long to store it" (Caretaker's responsibility).
+//
+// C++ IMPLEMENTATION NOTE:
+//   We use an inner class (Memento nested in TextEditor) to enforce the
+//   wide-interface (only Editor reads it) vs narrow-interface (History just
+//   holds an opaque object) distinction without C++ friend gymnastics.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace memento {
+
+// Originator
+class TextEditor {
+   public:
+    // Memento — opaque snapshot (only Originator accesses internals)
+    struct Snapshot {
+        friend class TextEditor;
+
+       private:
+        std::string buffer;
+        explicit Snapshot(std::string b) : buffer(std::move(b)) {}
+    };
+
+    void type(const std::string& text) {
+        buffer_ += text;
+        std::cout << "  Typed: \"" << text << "\" → buffer: \"" << buffer_ << "\"\n";
+    }
+    void deleteLast(size_t n) {
+        n = std::min(n, buffer_.size());
+        buffer_.erase(buffer_.size() - n);
+        std::cout << "  Deleted " << n << " chars → buffer: \"" << buffer_ << "\"\n";
+    }
+
+    Snapshot save() const {
+        std::cout << "  [Editor] Snapshot saved\n";
+        return Snapshot(buffer_);
+    }
+    void restore(const Snapshot& snap) {
+        buffer_ = snap.buffer;
+        std::cout << "  [Editor] Restored → buffer: \"" << buffer_ << "\"\n";
+    }
+    const std::string& text() const { return buffer_; }
+
+   private:
+    std::string buffer_;
+};
+
+// Caretaker — holds snapshots; can't read their contents
+struct History {
+    std::stack<TextEditor::Snapshot> undoStack;
+    std::stack<TextEditor::Snapshot> redoStack;
+
+    void save(TextEditor& e) {
+        undoStack.push(e.save());
+        while (!redoStack.empty()) redoStack.pop();  // clear redo on new edit
+    }
+    void undo(TextEditor& e) {
+        if (undoStack.empty()) {
+            std::cout << "  [History] Nothing to undo\n";
+            return;
+        }
+        redoStack.push(e.save());  // save current state for redo
+        e.restore(undoStack.top());
+        undoStack.pop();
+    }
+    void redo(TextEditor& e) {
+        if (redoStack.empty()) {
+            std::cout << "  [History] Nothing to redo\n";
+            return;
+        }
+        undoStack.push(e.save());
+        e.restore(redoStack.top());
+        redoStack.pop();
+    }
+};
+
+void demo() {
+    std::cout << "\n=== Memento: Text Editor Undo/Redo ===\n";
+    TextEditor editor;
+    History    history;
+
+    history.save(editor);
+    editor.type("Hello");
+    history.save(editor);
+
+    editor.type(", World");
+    history.save(editor);
+
+    editor.deleteLast(5);
+    history.save(editor);
+
+    std::cout << "Undo:\n";
+    history.undo(editor);
+    std::cout << "Undo:\n";
+    history.undo(editor);
+    std::cout << "Redo:\n";
+    history.redo(editor);
+}
+
+}  // namespace memento
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 19: OBSERVER
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Stock Price Tracker
+//   A stock exchange publishes price updates for stocks. Investors (Observers)
+//   register to be notified when a stock they follow changes price. The
+//   exchange (Subject) doesn't know how many investors exist or what they do
+//   with the data.
+//
+// WHY OBSERVER?
+//   ✓ A change to the Subject (StockExchange) must automatically notify an
+//     unknown, dynamic number of dependents (Investors).
+//   ✓ The Subject and Observers should be loosely coupled — investors can be
+//     added/removed at runtime without changing the exchange.
+//   ✓ This is the textbook publish-subscribe problem.
+//
+// PULL vs PUSH:
+//   PUSH model shown here for clarity, but GoF recommends PULL (Subject sends
+//   minimal notification; Observers query for specific data they need) because
+//   it's more general and avoids sending data Observers don't care about.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace observer {
+
+struct StockObserver {
+    virtual void onPriceChange(const std::string& ticker, double price) = 0;
+    virtual ~StockObserver()                                            = default;
+};
+
+// Subject
+struct StockExchange {
+    std::vector<StockObserver*>             observers;
+    std::unordered_map<std::string, double> prices;
+
+    void attach(StockObserver* o) { observers.push_back(o); }
+    void detach(StockObserver* o) {
+        observers.erase(std::remove(observers.begin(), observers.end(), o), observers.end());
+    }
+
+    void setPrice(const std::string& ticker, double price) {
+        prices[ticker] = price;
+        std::cout << "[Exchange] " << ticker << " → $" << price << "\n";
+        notify(ticker, price);
+    }
+
+   private:
+    void notify(const std::string& ticker, double price) {
+        for (auto* obs : observers) obs->onPriceChange(ticker, price);
+    }
+};
+
+// Concrete Observers
+struct InvestorDisplay : StockObserver {
+    std::string name;
+    explicit InvestorDisplay(std::string n) : name(std::move(n)) {}
+    void onPriceChange(const std::string& ticker, double price) override {
+        std::cout << "  [" << name << "] Updated dashboard: " << ticker << " = $" << price << "\n";
+    }
+};
+struct AlertBot : StockObserver {
+    double threshold;
+    explicit AlertBot(double t) : threshold(t) {}
+    void onPriceChange(const std::string& ticker, double price) override {
+        if (price > threshold)
+            std::cout << "  [AlertBot] 🚨 " << ticker << " exceeded $" << threshold << "! Now at $"
+                      << price << "\n";
+    }
+};
+
+void demo() {
+    std::cout << "\n=== Observer: Stock Price Tracker ===\n";
+    StockExchange   exchange;
+    InvestorDisplay alice("Alice"), bob("Bob");
+    AlertBot        bot(150.0);
+
+    exchange.attach(&alice);
+    exchange.attach(&bob);
+    exchange.attach(&bot);
+
+    exchange.setPrice("AAPL", 145.00);
+    exchange.setPrice("AAPL", 160.00);
+
+    std::cout << "[Bob unsubscribes]\n";
+    exchange.detach(&bob);
+    exchange.setPrice("AAPL", 170.00);
+}
+
+}  // namespace observer
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 20: STATE
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Traffic Light State Machine
+//   A traffic light cycles Red → Green → Yellow → Red. Each light's behavior
+//   on tick() changes completely depending on the current state. Without State,
+//   this becomes a large switch/if-else on a state enum scattered everywhere.
+//   Adding a BlinkingRed (emergency) state means touching every switch.
+//
+// WHY STATE?
+//   ✓ The TrafficLight's behavior depends entirely on current state.
+//   ✓ There are multiple state-dependent operations (tick, display).
+//   ✓ Transitions are clean, well-defined, and need to be extended.
+//
+// STATE vs STRATEGY:
+//   State — transitions itself based on internal logic (auto-advance).
+//   Strategy — set explicitly by the client; stays fixed until client changes
+//   it.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace state {
+
+struct TrafficLight;  // forward
+
+// State interface
+struct LightState {
+    virtual void display(const TrafficLight&) const = 0;
+    virtual void tick(TrafficLight&)                = 0;
+    virtual ~LightState()                           = default;
+};
+
+// Context
+struct TrafficLight {
+    std::unique_ptr<LightState> state;
+    TrafficLight();  // defined after states
+    void tick() { state->tick(*this); }
+    void display() { state->display(*this); }
+    void changeState(std::unique_ptr<LightState> s) { state = std::move(s); }
+};
+
+struct RedState : LightState {
+    void display(const TrafficLight&) const override { std::cout << "  🔴 RED — STOP\n"; }
+    void tick(TrafficLight& light) override;
+};
+struct GreenState : LightState {
+    void display(const TrafficLight&) const override { std::cout << "  🟢 GREEN — GO\n"; }
+    void tick(TrafficLight& light) override;
+};
+struct YellowState : LightState {
+    void display(const TrafficLight&) const override { std::cout << "  🟡 YELLOW — SLOW\n"; }
+    void tick(TrafficLight& light) override;
+};
+
+// Transitions defined after all states are declared
+void RedState::tick(TrafficLight& light) { light.changeState(std::make_unique<GreenState>()); }
+void GreenState::tick(TrafficLight& light) { light.changeState(std::make_unique<YellowState>()); }
+void YellowState::tick(TrafficLight& light) { light.changeState(std::make_unique<RedState>()); }
+
+TrafficLight::TrafficLight() : state(std::make_unique<RedState>()) {}
+
+void demo() {
+    std::cout << "\n=== State: Traffic Light ===\n";
+    TrafficLight light;
+    for (int i = 0; i < 6; ++i) {
+        std::cout << "Tick " << i + 1 << ":\n";
+        light.display();
+        light.tick();
+    }
+}
+
+}  // namespace state
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 21: STRATEGY
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Sorting Algorithm Selector
+//   A data processing tool needs to sort arrays. Different datasets perform
+//   differently with different algorithms (Bubble for tiny sets, Quick for
+//   medium, Merge for large/stable). The client selects the algorithm at
+//   runtime based on data size; the sorting logic stays separate from the
+//   data processing pipeline.
+//
+// WHY STRATEGY?
+//   ✓ Family of related algorithms (sort methods) that must be interchangeable.
+//   ✓ The algorithm should be selectable at runtime, not hard-coded.
+//   ✓ Eliminates a large conditional: if (size < 10) bubble(); else quick();
+//
+// STRATEGY vs TEMPLATE METHOD:
+//   Template Method: uses inheritance to vary STEPS of an algorithm
+//   (compile-time). Strategy: uses composition to replace the WHOLE algorithm
+//   (runtime). Choose Strategy when the algorithm itself must vary at runtime.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace strategy {
+
+using Vec = std::vector<int>;
+
+// Strategy interface
+struct SortStrategy {
+    virtual void        sort(Vec& data) const = 0;
+    virtual std::string name() const          = 0;
+    virtual ~SortStrategy()                   = default;
+};
+
+struct BubbleSort : SortStrategy {
+    void sort(Vec& d) const override {
+        for (size_t i = 0; i < d.size(); ++i)
+            for (size_t j = 0; j + 1 < d.size() - i; ++j)
+                if (d[j] > d[j + 1])
+                    std::swap(d[j], d[j + 1]);
+    }
+    std::string name() const override { return "BubbleSort"; }
+};
+
+struct QuickSort : SortStrategy {
+    void sort(Vec& d) const override { qsort(d, 0, (int)d.size() - 1); }
+    void qsort(Vec& d, int l, int r) const {
+        if (l >= r)
+            return;
+        int pivot = d[r], i = l - 1;
+        for (int j = l; j < r; ++j)
+            if (d[j] <= pivot)
+                std::swap(d[++i], d[j]);
+        std::swap(d[++i], d[r]);
+        qsort(d, l, i - 1);
+        qsort(d, i + 1, r);
+    }
+    std::string name() const override { return "QuickSort"; }
+};
+
+struct MergeSort : SortStrategy {
+    void sort(Vec& d) const override { mergeSort(d, 0, (int)d.size() - 1); }
+    void mergeSort(Vec& d, int l, int r) const {
+        if (l >= r)
+            return;
+        int m = (l + r) / 2;
+        mergeSort(d, l, m);
+        mergeSort(d, m + 1, r);
+        Vec tmp;
+        int i = l, j = m + 1;
+        while (i <= m && j <= r) tmp.push_back(d[i] <= d[j] ? d[i++] : d[j++]);
+        while (i <= m) tmp.push_back(d[i++]);
+        while (j <= r) tmp.push_back(d[j++]);
+        for (int k = l; k <= r; ++k) d[k] = tmp[k - l];
+    }
+    std::string name() const override { return "MergeSort"; }
+};
+
+// Context — holds a Strategy reference
+struct DataSorter {
+    std::unique_ptr<SortStrategy> strategy;
+
+    void setStrategy(std::unique_ptr<SortStrategy> s) { strategy = std::move(s); }
+
+    void sort(Vec& data) {
+        std::cout << "  Sorting " << data.size() << " items with " << strategy->name() << ":\n";
+        strategy->sort(data);
+        std::cout << "  Result: ";
+        for (int v : data) std::cout << v << " ";
+        std::cout << "\n";
+    }
+};
+
+// Smart selector: pick algorithm based on data characteristics
+std::unique_ptr<SortStrategy> selectStrategy(size_t n) {
+    if (n <= 8)
+        return std::make_unique<BubbleSort>();
+    if (n <= 100)
+        return std::make_unique<QuickSort>();
+    return std::make_unique<MergeSort>();
+}
+
+void demo() {
+    std::cout << "\n=== Strategy: Sorting Algorithm Selector ===\n";
+    DataSorter sorter;
+
+    Vec small = {5, 2, 8, 1};
+    sorter.setStrategy(selectStrategy(small.size()));
+    sorter.sort(small);
+
+    Vec medium = {64, 25, 12, 22, 11, 90, 3, 47, 80, 55};
+    sorter.setStrategy(selectStrategy(medium.size()));
+    sorter.sort(medium);
+}
+
+}  // namespace strategy
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 22: TEMPLATE METHOD
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Data Report Generator
+//   A reporting system generates reports in different formats (CSV, HTML).
+//   The steps are always: (1) fetchData, (2) parseData, (3) formatOutput,
+//   (4) saveFile. Steps 1 and 4 are identical for all formats. Steps 2 and 3
+//   vary. Template Method defines the skeleton in the base class.
+//
+// WHY TEMPLATE METHOD?
+//   ✓ The algorithm structure (steps 1-4) is invariant.
+//   ✓ Only specific steps (parse, format) vary by subclass.
+//   ✓ Avoids duplicating steps 1 and 4 across every report type.
+//   ✓ The "Hollywood Principle" — the base class calls the subclass, not vice
+//   versa.
+//
+// TEMPLATE METHOD vs STRATEGY:
+//   Template Method → inheritance, compile-time. The STRUCTURE is fixed;
+//                     subclasses customize STEPS. Less overhead.
+//   Strategy        → composition, runtime. The WHOLE algorithm can be swapped.
+//   Choose Template Method when you control the class hierarchy and structure
+//   is truly invariant. Choose Strategy when the algorithm itself varies at
+//   runtime.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace template_method {
+
+struct ReportGenerator {
+    // Template Method — the invariant skeleton (final to prevent overriding)
+    void generate(const std::string& title) {
+        auto raw    = fetchData(title);           // same for all
+        auto data   = parseData(raw);             // varies
+        auto output = formatOutput(title, data);  // varies
+        saveFile(output);                         // same for all
+    }
+
+    virtual ~ReportGenerator() = default;
+
+   protected:
+    // Invariant steps (concrete in base)
+    std::string fetchData(const std::string& t) {
+        std::cout << "  [Base] Fetching data for: " << t << "\n";
+        return "row1|col1|col2\nrow2|col3|col4";
+    }
+    void saveFile(const std::string& output) {
+        std::cout << "  [Base] Saving output (" << output.size() << " chars)\n";
+    }
+
+    // Variant steps (abstract — must be implemented by subclasses)
+    virtual std::vector<std::string> parseData(const std::string& raw) = 0;
+    virtual std::string              formatOutput(
+        const std::string& title, const std::vector<std::string>& rows
+    ) = 0;
+};
+
+struct CSVReport : ReportGenerator {
+   protected:
+    std::vector<std::string> parseData(const std::string& raw) override {
+        std::cout << "  [CSV] Parsing raw data\n";
+        std::vector<std::string> rows;
+        std::istringstream       ss(raw);
+        std::string              line;
+        while (std::getline(ss, line)) rows.push_back(line);
+        return rows;
+    }
+    std::string formatOutput(
+        const std::string& title, const std::vector<std::string>& rows
+    ) override {
+        std::cout << "  [CSV] Formatting as CSV\n";
+        std::string out = "# " + title + "\n";
+        for (const auto& r : rows) {
+            auto row = r;
+            std::replace(row.begin(), row.end(), '|', ',');
+            out += row + "\n";
+        }
+        return out;
+    }
+};
+
+struct HTMLReport : ReportGenerator {
+   protected:
+    std::vector<std::string> parseData(const std::string& raw) override {
+        std::cout << "  [HTML] Parsing raw data\n";
+        std::vector<std::string> rows;
+        std::istringstream       ss(raw);
+        std::string              line;
+        while (std::getline(ss, line)) rows.push_back(line);
+        return rows;
+    }
+    std::string formatOutput(
+        const std::string& title, const std::vector<std::string>& rows
+    ) override {
+        std::cout << "  [HTML] Formatting as HTML\n";
+        std::string out = "<h1>" + title + "</h1><table>";
+        for (const auto& r : rows) out += "<tr><td>" + r + "</td></tr>";
+        out += "</table>";
+        return out;
+    }
+};
+
+void demo() {
+    std::cout << "\n=== Template Method: Report Generator ===\n";
+    CSVReport  csv;
+    HTMLReport html;
+
+    std::cout << "Generating CSV report:\n";
+    csv.generate("Q4 Sales");
+    std::cout << "Generating HTML report:\n";
+    html.generate("Q4 Sales");
+}
+
+}  // namespace template_method
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATTERN 23: VISITOR
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// PROJECT: Shopping Cart — Tax & Discount Calculator
+//   A shopping cart contains Electronics and Food items. We need multiple
+//   operations: (1) calculate total price, (2) calculate tax, (3) apply
+//   discounts. Adding these methods to every item class would pollute them.
+//   The set of item types is stable; the number of operations grows over time.
+//
+// WHY VISITOR?
+//   ✓ Many distinct operations (price, tax, discount) over a stable set of
+//     element types (Electronics, Food). Classic Visitor use case.
+//   ✓ Adding a new operation = add one Visitor class; no item classes change.
+//   ✓ Related logic is co-located in one Visitor (all tax logic in TaxVisitor).
+//
+// CRITICAL TRADE-OFF:
+//   Visitor is the INVERSE of Interpreter's trade-off:
+//     Adding new OPERATIONS: easy with Visitor, hard with Interpreter.
+//     Adding new ELEMENT TYPES: easy with Interpreter, hard with Visitor
+//                               (every ConcreteVisitor must add a new Visit
+//                               method).
+//
+// DOUBLE DISPATCH:
+//   element.accept(visitor) → visitor.visit(this)
+//   Both the element type AND the visitor type determine which code runs.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace visitor {
+
+struct Electronics;  // forward declarations for Visitor
+struct Food;
+
+// Visitor interface — one Visit method per element type
+struct CartVisitor {
+    virtual void visit(const Electronics& e) = 0;
+    virtual void visit(const Food& f)        = 0;
+    virtual ~CartVisitor()                   = default;
+};
+
+// Element interface
+struct CartItem {
+    std::string name;
+    double      price;
+    CartItem(std::string n, double p) : name(std::move(n)), price(p) {}
+    virtual void accept(CartVisitor& v) const = 0;
+    virtual ~CartItem()                       = default;
+};
+
+// Concrete Elements
+struct Electronics : CartItem {
+    using CartItem::CartItem;
+    void accept(CartVisitor& v) const override { v.visit(*this); }
+};
+struct Food : CartItem {
+    using CartItem::CartItem;
+    void accept(CartVisitor& v) const override { v.visit(*this); }
+};
+
+// Concrete Visitor 1: Calculate total price
+struct PriceVisitor : CartVisitor {
+    double total = 0;
+    void   visit(const Electronics& e) override {
+        total += e.price;
+        std::cout << "  Electronics: " << e.name << " $" << e.price << "\n";
+    }
+    void visit(const Food& f) override {
+        total += f.price;
+        std::cout << "  Food:        " << f.name << " $" << f.price << "\n";
+    }
+};
+
+// Concrete Visitor 2: Calculate tax (Electronics 15%, Food 5%)
+struct TaxVisitor : CartVisitor {
+    double totalTax = 0;
+    void   visit(const Electronics& e) override {
+        double tax = e.price * 0.15;
+        totalTax += tax;
+        std::cout << "  Electronics tax (" << e.name << "): $" << tax << " (15%)\n";
+    }
+    void visit(const Food& f) override {
+        double tax = f.price * 0.05;
+        totalTax += tax;
+        std::cout << "  Food tax (" << f.name << "): $" << tax << " (5%)\n";
+    }
+};
+
+// Concrete Visitor 3: Apply discounts (Electronics 10% off, Food no discount)
+struct DiscountVisitor : CartVisitor {
+    double totalSaved = 0;
+    void   visit(const Electronics& e) override {
+        double saved = e.price * 0.10;
+        totalSaved += saved;
+        std::cout << "  Electronics discount (" << e.name << "): -$" << saved << " (10% off)\n";
+    }
+    void visit(const Food& f) override { std::cout << "  No discount on " << f.name << "\n"; }
+};
+
+void demo() {
+    std::cout << "\n=== Visitor: Shopping Cart ===\n";
+    std::vector<std::unique_ptr<CartItem>> cart;
+    cart.push_back(std::make_unique<Electronics>("Laptop", 999.99));
+    cart.push_back(std::make_unique<Food>("Organic Tea", 12.50));
+    cart.push_back(std::make_unique<Electronics>("Headphones", 149.99));
+    cart.push_back(std::make_unique<Food>("Coffee Beans", 24.00));
+
+    std::cout << "\n-- Price Breakdown --\n";
+    PriceVisitor pv;
+    for (const auto& item : cart) item->accept(pv);
+    std::cout << "  Total: $" << pv.total << "\n";
+
+    std::cout << "\n-- Tax Calculation --\n";
+    TaxVisitor tv;
+    for (const auto& item : cart) item->accept(tv);
+    std::cout << "  Total Tax: $" << tv.totalTax << "\n";
+
+    std::cout << "\n-- Discounts Applied --\n";
+    DiscountVisitor dv;
+    for (const auto& item : cart) item->accept(dv);
+    std::cout << "  Total Saved: $" << dv.totalSaved << "\n";
+}
+
+}  // namespace visitor
+
+// ─────────────────────────────────────────────────────────────────────────────
+int main() {
+    chain_of_responsibility::demo();
+    command::demo();
+    interpreter::demo();
+    iterator::demo();
+    mediator::demo();
+    memento::demo();
+    observer::demo();
+    state::demo();
+    strategy::demo();
+    template_method::demo();
+    visitor::demo();
+    return 0;
+}
