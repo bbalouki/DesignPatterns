@@ -433,12 +433,15 @@ class AppConfig {
 
     /// Delete copy/move to prevent accidental duplication
     AppConfig(const AppConfig&)            = delete;
+    AppConfig(AppConfig&&)                 = delete;
     AppConfig& operator=(const AppConfig&) = delete;
+    AppConfig& operator=(AppConfig&&)      = delete;
 
     /// Configuration values (in a real app, loaded from a file)
-    std::string theme      = "dark";
-    std::string language   = "en_US";
-    int         maxThreads = 8;
+    std::string theme    = "dark";
+    std::string language = "en_US";
+
+    int maxThreads = 8;
 
     void describe() const {
         std::println("Config: theme={} lang={} threads={}", theme, language, maxThreads);
