@@ -10,8 +10,8 @@
 
 #include <algorithm>
 #include <functional>
-#include <iostream>
 #include <memory>
+#include <print>
 #include <sstream>
 #include <stack>
 #include <string>
@@ -76,7 +76,7 @@ struct SupportHandler {
         if (successor)
             successor->handle(tkt);
         else
-            std::cout << "  [Unhandled] Ticket dropped: " << tkt.description << "\n";
+            std::println("[Unhandled] Ticket dropped: {}", tkt.description);
     }
     virtual ~SupportHandler() = default;
 };
@@ -84,9 +84,9 @@ struct SupportHandler {
 struct L1Agent : SupportHandler {
     void handle(const Ticket& tkt) override {
         if (tkt.severity == Severity::LOW) {
-            std::cout << "  [L1 Agent] Resolved '" << tkt.description << "'\n";
+            std::println("[L1 Agent] Resolved '{}'", tkt.description);
         } else {
-            std::cout << "  [L1 Agent] Escalating " << severityName(tkt.severity) << " ticket\n";
+            std::println("[L1 Agent] Escalating {} ticket", severityName(tkt.severity));
             SupportHandler::handle(tkt);
         }
     }
@@ -94,9 +94,9 @@ struct L1Agent : SupportHandler {
 struct L2Agent : SupportHandler {
     void handle(const Ticket& tkt) override {
         if (tkt.severity <= Severity::MEDIUM) {
-            std::cout << "  [L2 Agent] Resolved '" << tkt.description << "'\n";
+            std::println("[L2 Agent] Resolved '{}'", tkt.description);
         } else {
-            std::cout << "  [L2 Agent] Escalating " << severityName(tkt.severity) << " ticket\n";
+            std::println("[L2 Agent] Escalating {} ticket", severityName(tkt.severity));
             SupportHandler::handle(tkt);
         }
     }
@@ -104,21 +104,21 @@ struct L2Agent : SupportHandler {
 struct Manager : SupportHandler {
     void handle(const Ticket& tkt) override {
         if (tkt.severity <= Severity::HIGH) {
-            std::cout << "  [Manager] Resolved '" << tkt.description << "'\n";
+            std::println("[Manager] Resolved '{}'", tkt.description);
         } else {
-            std::cout << "  [Manager] Escalating CRITICAL ticket to CTO\n";
+            std::println("[Manager] Escalating CRITICAL ticket to CTO");
             SupportHandler::handle(tkt);
         }
     }
 };
 struct CTO : SupportHandler {
     void handle(const Ticket& tkt) override {
-        std::cout << "  [CTO] Personally handling CRITICAL: '" << tkt.description << "'\n";
+        std::println("[CTO] Personally handling CRITICAL: '{}'", tkt.description);
     }
 };
 
 void demo() {
-    std::cout << "\n=== Chain of Responsibility: Support Escalation ===\n";
+    std::println("\n Chain of Responsibility: Support Escalation ");
     auto lvl1 = std::make_shared<L1Agent>();
     auto lvl2 = std::make_shared<L2Agent>();
     auto mgr  = std::make_shared<Manager>();
@@ -134,8 +134,7 @@ void demo() {
         {"Production database down", Severity::CRITICAL},
     };
     for (const auto& tkt : tickets) {
-        std::cout << "Submitting [" << severityName(tkt.severity) << "]: " << tkt.description
-                  << "\n";
+        std::println("Submitting [{}]: {}", severityName(tkt.severity), tkt.description);
         lvl1->handle(tkt);
     }
 }
@@ -172,15 +171,15 @@ struct SmartBulb {
 
     void turnOn() {
         isOn = true;
-        std::cout << "  [Bulb] ON  (brightness=" << brightness << ")\n";
+        std::println("[Bulb] ON  (brightness={})", brightness);
     }
     void turnOff() {
         isOn = false;
-        std::cout << "  [Bulb] OFF\n";
+        std::println("[Bulb] OFF");
     }
     void dim(int brt) {
         brightness = brt;
-        std::cout << "  [Bulb] Dimmed to " << brt << "%\n";
+        std::println("[Bulb] Dimmed to {}%", brt);
     }
 };
 
@@ -254,13 +253,13 @@ struct Remote {
             history.top()->undo();
             history.pop();
         } else {
-            std::cout << "  [Remote] Nothing to undo\n";
+            std::println("[Remote] Nothing to undo");
         }
     }
 };
 
 void demo() {
-    std::cout << "\n=== Command: Smart Bulb Remote with Undo ===\n";
+    std::println("\n Command: Smart Bulb Remote with Undo ");
     SmartBulb bulb;
     Remote    remote;
 
@@ -268,15 +267,15 @@ void demo() {
     DimCommand     dim(bulb, 40);
     TurnOffCommand off(bulb);
 
-    std::cout << "Press ON:\n";
+    std::println("Press ON:");
     remote.press(onCmd);
-    std::cout << "Press DIM 40:\n";
+    std::println("Press DIM 40:");
     remote.press(dim);
-    std::cout << "UNDO dim:\n";
+    std::println("UNDO dim:");
     remote.pressUndo();
-    std::cout << "UNDO on:\n";
+    std::println("UNDO on:");
     remote.pressUndo();
-    std::cout << "UNDO (empty):\n";
+    std::println("UNDO (empty):");
     remote.pressUndo();
 }
 
@@ -337,7 +336,7 @@ struct SubExpr : Expr {
 };
 
 void demo() {
-    std::cout << "\n=== Interpreter: Arithmetic Expression Evaluator ===\n";
+    std::println("\n Interpreter: Arithmetic Expression Evaluator ");
 
     // Build AST for: ((3 + 4) - 2)
     auto expr = std::make_unique<SubExpr>(
@@ -345,8 +344,8 @@ void demo() {
         std::make_unique<NumberExpr>(2)
     );
 
-    std::cout << "Expression: " << expr->str() << "\n";
-    std::cout << "Result:     " << expr->interpret() << "\n";
+    std::println("Expression: {}", expr->str());
+    std::println("Result:     {}", expr->interpret());
 
     // ((10 - 3) + (2 + 1)) = 10
     auto expr2 = std::make_unique<AddExpr>(
@@ -355,7 +354,7 @@ void demo() {
         ),
         std::make_unique<AddExpr>(std::make_unique<NumberExpr>(2), std::make_unique<NumberExpr>(1))
     );
-    std::cout << "Expression: " << expr2->str() << " = " << expr2->interpret() << "\n";
+    std::println("Expression: {} = {}", expr2->str(), expr2->interpret());
 }
 
 }  // namespace interpreter
@@ -435,15 +434,15 @@ std::unique_ptr<PlaylistIterator> Playlist::shuffleIterator() const {
 }
 
 void play(PlaylistIterator& itr, const std::string& mode) {
-    std::cout << "[" << mode << " mode]\n";
+    std::println("[{} mode]", mode);
     while (itr.hasNext()) {
         auto sng = itr.next();
-        std::cout << "  ♪ " << sng.title << " - " << sng.artist << "\n";
+        std::println("♪ {} - {}", sng.title, sng.artist);
     }
 }
 
 void demo() {
-    std::cout << "\n=== Iterator: Music Playlist Traversal ===\n";
+    std::println("\n Iterator: Music Playlist Traversal ");
     Playlist playlist;
     playlist.addSong("Bohemian Rhapsody", "Queen");
     playlist.addSong("Hotel California", "Eagles");
@@ -505,12 +504,12 @@ struct User {
     }
 
     void send(const std::string& msg) {
-        std::cout << "[" << name << "] sends: " << msg << "\n";
+        std::println("[{}] sends: {}", name, msg);
         if (room)
             room->sendMessage(msg, this);
     }
     void receive(const std::string& msg, const std::string& from) {
-        std::cout << "  -> [" << name << "] receives from " << from << ": " << msg << "\n";
+        std::println("-> [{}] receives from {}: {}", name, from, msg);
     }
 };
 
@@ -528,7 +527,7 @@ struct GeneralChatRoom : ChatRoom {
 };
 
 void demo() {
-    std::cout << "\n=== Mediator: Chat Room ===\n";
+    std::println("\n Mediator: Chat Room ");
     GeneralChatRoom room;
     User            alice("Alice"), bob("Bob"), carol("Carol");
     alice.join(room);
@@ -578,21 +577,21 @@ class TextEditor {
 
     void type(const std::string& text) {
         m_buffer += text;
-        std::cout << "  Typed: \"" << text << "\" → buffer: \"" << m_buffer << "\"\n";
+        std::println("Typed: \"{}\" → buffer: \"{}\"", text, m_buffer);
     }
     void deleteLast(size_t num) {
         num = std::min(num, m_buffer.size());
         m_buffer.erase(m_buffer.size() - num);
-        std::cout << "  Deleted " << num << " chars → buffer: \"" << m_buffer << "\"\n";
+        std::println("Deleted {} chars → buffer: \"{}\"", num, m_buffer);
     }
 
     Snapshot save() const {
-        std::cout << "  [Editor] Snapshot saved\n";
+        std::println("[Editor] Snapshot saved");
         return Snapshot(m_buffer);
     }
     void restore(const Snapshot& snap) {
         m_buffer = snap.buffer;
-        std::cout << "  [Editor] Restored → buffer: \"" << m_buffer << "\"\n";
+        std::println("[Editor] Restored → buffer: \"{}\"", m_buffer);
     }
     const std::string& text() const { return m_buffer; }
 
@@ -611,7 +610,7 @@ struct History {
     }
     void undo(TextEditor& edt) {
         if (undoStack.empty()) {
-            std::cout << "  [History] Nothing to undo\n";
+            std::println("[History] Nothing to undo");
             return;
         }
         redoStack.push(edt.save());  // save current state for redo
@@ -620,7 +619,7 @@ struct History {
     }
     void redo(TextEditor& edt) {
         if (redoStack.empty()) {
-            std::cout << "  [History] Nothing to redo\n";
+            std::println("[History] Nothing to redo");
             return;
         }
         undoStack.push(edt.save());
@@ -630,7 +629,7 @@ struct History {
 };
 
 void demo() {
-    std::cout << "\n=== Memento: Text Editor Undo/Redo ===\n";
+    std::println("\n Memento: Text Editor Undo/Redo ");
     TextEditor editor;
     History    history;
 
@@ -644,11 +643,11 @@ void demo() {
     editor.deleteLast(5);
     history.save(editor);
 
-    std::cout << "Undo:\n";
+    std::println("Undo:");
     history.undo(editor);
-    std::cout << "Undo:\n";
+    std::println("Undo:");
     history.undo(editor);
-    std::cout << "Redo:\n";
+    std::println("Redo:");
     history.redo(editor);
 }
 
@@ -695,7 +694,7 @@ struct StockExchange {
 
     void setPrice(const std::string& ticker, double price) {
         prices[ticker] = price;
-        std::cout << "[Exchange] " << ticker << " → $" << price << "\n";
+        std::println("[Exchange] {} → ${}", ticker, price);
         notify(ticker, price);
     }
 
@@ -710,7 +709,7 @@ struct InvestorDisplay : StockObserver {
     std::string name;
     explicit InvestorDisplay(std::string nam) : name(std::move(nam)) {}
     void onPriceChange(const std::string& ticker, double price) override {
-        std::cout << "  [" << name << "] Updated dashboard: " << ticker << " = $" << price << "\n";
+        std::println("[{}] Updated dashboard: {} = ${}", name, ticker, price);
     }
 };
 struct AlertBot : StockObserver {
@@ -718,13 +717,12 @@ struct AlertBot : StockObserver {
     explicit AlertBot(double thr) : threshold(thr) {}
     void onPriceChange(const std::string& ticker, double price) override {
         if (price > threshold)
-            std::cout << "  [AlertBot] 🚨 " << ticker << " exceeded $" << threshold << "! Now at $"
-                      << price << "\n";
+            std::println("[AlertBot] 🚨 {} exceeded ${}! Now at ${}", ticker, threshold, price);
     }
 };
 
 void demo() {
-    std::cout << "\n=== Observer: Stock Price Tracker ===\n";
+    std::println("\n Observer: Stock Price Tracker ");
     StockExchange   exchange;
     InvestorDisplay alice("Alice"), bob("Bob");
     AlertBot        bot(150.0);
@@ -736,7 +734,7 @@ void demo() {
     exchange.setPrice("AAPL", 145.00);
     exchange.setPrice("AAPL", 160.00);
 
-    std::cout << "[Bob unsubscribes]\n";
+    std::println("[Bob unsubscribes]");
     exchange.detach(&bob);
     exchange.setPrice("AAPL", 170.00);
 }
@@ -783,15 +781,15 @@ struct TrafficLight {
 };
 
 struct RedState : LightState {
-    void display(const TrafficLight&) const override { std::cout << "  🔴 RED - STOP\n"; }
+    void display(const TrafficLight&) const override { std::println("🔴 RED - STOP"); }
     void tick(TrafficLight& light) override;
 };
 struct GreenState : LightState {
-    void display(const TrafficLight&) const override { std::cout << "  🟢 GREEN - GO\n"; }
+    void display(const TrafficLight&) const override { std::println("🟢 GREEN - GO"); }
     void tick(TrafficLight& light) override;
 };
 struct YellowState : LightState {
-    void display(const TrafficLight&) const override { std::cout << "  🟡 YELLOW - SLOW\n"; }
+    void display(const TrafficLight&) const override { std::println("🟡 YELLOW - SLOW"); }
     void tick(TrafficLight& light) override;
 };
 
@@ -803,10 +801,10 @@ void YellowState::tick(TrafficLight& light) { light.changeState(std::make_unique
 TrafficLight::TrafficLight() : state(std::make_unique<RedState>()) {}
 
 void demo() {
-    std::cout << "\n=== State: Traffic Light ===\n";
+    std::println("\n State: Traffic Light ");
     TrafficLight light;
     for (int idx = 0; idx < 6; ++idx) {
-        std::cout << "Tick " << idx + 1 << ":\n";
+        std::println("Tick {}:", idx + 1);
         light.display();
         light.tick();
     }
@@ -898,11 +896,11 @@ struct DataSorter {
     void setStrategy(std::unique_ptr<SortStrategy> strat) { strategy = std::move(strat); }
 
     void sort(Vec& data) {
-        std::cout << "  Sorting " << data.size() << " items with " << strategy->name() << ":\n";
+        std::println("Sorting {} items with {}:", data.size(), strategy->name());
         strategy->sort(data);
-        std::cout << "  Result: ";
-        for (int val : data) std::cout << val << " ";
-        std::cout << "\n";
+        std::print("  Result:");
+        for (int val : data) std::print(" {}", val);
+        std::println("");
     }
 };
 
@@ -916,7 +914,7 @@ std::unique_ptr<SortStrategy> selectStrategy(size_t num) {
 }
 
 void demo() {
-    std::cout << "\n=== Strategy: Sorting Algorithm Selector ===\n";
+    std::println("\n Strategy: Sorting Algorithm Selector ");
     DataSorter sorter;
 
     Vec tiny = {5, 2, 8, 1};
@@ -971,11 +969,11 @@ struct ReportGenerator {
    protected:
     /// Invariant steps (concrete in base)
     std::string fetchData(const std::string& title) {
-        std::cout << "  [Base] Fetching data for: " << title << "\n";
+        std::println("[Base] Fetching data for: {}", title);
         return "row1|col1|col2\nrow2|col3|col4";
     }
     void saveFile(const std::string& output) {
-        std::cout << "  [Base] Saving output (" << output.size() << " chars)\n";
+        std::println("[Base] Saving output ({} chars)", output.size());
     }
 
     /// Variant steps (abstract - must be implemented by subclasses)
@@ -988,7 +986,7 @@ struct ReportGenerator {
 struct CSVReport : ReportGenerator {
    protected:
     std::vector<std::string> parseData(const std::string& raw) override {
-        std::cout << "  [CSV] Parsing raw data\n";
+        std::println("[CSV] Parsing raw data");
         std::vector<std::string> rows;
         std::istringstream       iss(raw);
         std::string              line;
@@ -998,7 +996,7 @@ struct CSVReport : ReportGenerator {
     std::string formatOutput(
         const std::string& title, const std::vector<std::string>& rows
     ) override {
-        std::cout << "  [CSV] Formatting as CSV\n";
+        std::println("[CSV] Formatting as CSV");
         std::string out = "# " + title + "\n";
         for (const auto& rawRow : rows) {
             auto row = rawRow;
@@ -1012,7 +1010,7 @@ struct CSVReport : ReportGenerator {
 struct HTMLReport : ReportGenerator {
    protected:
     std::vector<std::string> parseData(const std::string& raw) override {
-        std::cout << "  [HTML] Parsing raw data\n";
+        std::println("[HTML] Parsing raw data");
         std::vector<std::string> rows;
         std::istringstream       iss(raw);
         std::string              line;
@@ -1022,7 +1020,7 @@ struct HTMLReport : ReportGenerator {
     std::string formatOutput(
         const std::string& title, const std::vector<std::string>& rows
     ) override {
-        std::cout << "  [HTML] Formatting as HTML\n";
+        std::println("[HTML] Formatting as HTML");
         std::string out = "<h1>" + title + "</h1><table>";
         for (const auto& row : rows) out += "<tr><td>" + row + "</td></tr>";
         out += "</table>";
@@ -1031,13 +1029,13 @@ struct HTMLReport : ReportGenerator {
 };
 
 void demo() {
-    std::cout << "\n=== Template Method: Report Generator ===\n";
+    std::println("\n Template Method: Report Generator ");
     CSVReport  csv;
     HTMLReport html;
 
-    std::cout << "Generating CSV report:\n";
+    std::println("Generating CSV report:");
     csv.generate("Q4 Sales");
-    std::cout << "Generating HTML report:\n";
+    std::println("Generating HTML report:");
     html.generate("Q4 Sales");
 }
 
@@ -1106,11 +1104,11 @@ struct PriceVisitor : CartVisitor {
     double total = 0;
     void   visit(const Electronics& ele) override {
         total += ele.price;
-        std::cout << "  Electronics: " << ele.name << " $" << ele.price << "\n";
+        std::println("Electronics: {} ${}", ele.name, ele.price);
     }
     void visit(const Food& fod) override {
         total += fod.price;
-        std::cout << "  Food:        " << fod.name << " $" << fod.price << "\n";
+        std::println("Food:        {} ${}", fod.name, fod.price);
     }
 };
 
@@ -1120,12 +1118,12 @@ struct TaxVisitor : CartVisitor {
     void   visit(const Electronics& ele) override {
         double tax = ele.price * 0.15;
         totalTax += tax;
-        std::cout << "  Electronics tax (" << ele.name << "): $" << tax << " (15%)\n";
+        std::println("Electronics tax ({}): ${} (15%)", ele.name, tax);
     }
     void visit(const Food& fod) override {
         double tax = fod.price * 0.05;
         totalTax += tax;
-        std::cout << "  Food tax (" << fod.name << "): $" << tax << " (5%)\n";
+        std::println("Food tax ({}): ${} (5%)", fod.name, tax);
     }
 };
 
@@ -1135,38 +1133,38 @@ struct DiscountVisitor : CartVisitor {
     void   visit(const Electronics& ele) override {
         double saved = ele.price * 0.10;
         totalSaved += saved;
-        std::cout << "  Electronics discount (" << ele.name << "): -$" << saved << " (10% off)\n";
+        std::println("Electronics discount ({}): -${} (10% off)", ele.name, saved);
     }
-    void visit(const Food& fod) override { std::cout << "  No discount on " << fod.name << "\n"; }
+    void visit(const Food& fod) override { std::println("No discount on {}", fod.name); }
 };
 
 void demo() {
-    std::cout << "\n=== Visitor: Shopping Cart ===\n";
+    std::println("\n Visitor: Shopping Cart ");
     std::vector<std::unique_ptr<CartItem>> cart;
     cart.push_back(std::make_unique<Electronics>("Laptop", 999.99));
     cart.push_back(std::make_unique<Food>("Organic Tea", 12.50));
     cart.push_back(std::make_unique<Electronics>("Headphones", 149.99));
     cart.push_back(std::make_unique<Food>("Coffee Beans", 24.00));
 
-    std::cout << "\n-- Price Breakdown --\n";
+    std::println("\n-- Price Breakdown --");
     PriceVisitor prv;
     for (const auto& item : cart) item->accept(prv);
-    std::cout << "  Total: $" << prv.total << "\n";
+    std::println("Total: ${}", prv.total);
 
-    std::cout << "\n-- Tax Calculation --\n";
+    std::println("\n-- Tax Calculation --");
     TaxVisitor taxV;
     for (const auto& item : cart) item->accept(taxV);
-    std::cout << "  Total Tax: $" << taxV.totalTax << "\n";
+    std::println("Total Tax: ${}", taxV.totalTax);
 
-    std::cout << "\n-- Discounts Applied --\n";
+    std::println("\n-- Discounts Applied --");
     DiscountVisitor dscV;
     for (const auto& item : cart) item->accept(dscV);
-    std::cout << "  Total Saved: $" << dscV.totalSaved << "\n";
+    std::println("Total Saved: ${}", dscV.totalSaved);
 }
 
 }  // namespace visitor
 
-// ─────────────────────────────────────────────────────────────────────────────
+/// Main function
 int main() {
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);

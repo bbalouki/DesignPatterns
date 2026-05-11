@@ -11,8 +11,8 @@
 // =============================================================================
 
 #include <cassert>
-#include <iostream>
 #include <memory>
+#include <print>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -60,18 +60,18 @@ struct Checkbox {
 
 /// Concrete products - Windows family
 struct WindowsButton : Button {
-    void render() const override { std::cout << "[Windows] Rendering a rectangular button\n"; }
+    void render() const override { std::println("[Windows] Rendering a rectangular button"); }
 };
 struct WindowsCheckbox : Checkbox {
-    void render() const override { std::cout << "[Windows] Rendering a square checkbox\n"; }
+    void render() const override { std::println("[Windows] Rendering a square checkbox"); }
 };
 
 /// Concrete products - macOS family
 struct MacButton : Button {
-    void render() const override { std::cout << "[macOS] Rendering a rounded button\n"; }
+    void render() const override { std::println("[macOS] Rendering a rounded button"); }
 };
 struct MacCheckbox : Checkbox {
-    void render() const override { std::cout << "[macOS] Rendering a circular checkbox\n"; }
+    void render() const override { std::println("[macOS] Rendering a circular checkbox"); }
 };
 
 /// Abstract factory: one creation method per product KIND
@@ -106,12 +106,12 @@ void renderUI(const WidgetFactory& factory) {
 }
 
 void demo() {
-    std::cout << "\n=== Abstract Factory: Cross-Platform UI ===\n";
+    std::println("\n Abstract Factory: Cross-Platform UI ");
     WindowsFactory winFac;
     MacFactory     macFac;
-    std::cout << "On Windows:\n";
+    std::println("On Windows:");
     renderUI(winFac);
-    std::cout << "On macOS:\n";
+    std::println("On macOS:");
     renderUI(macFac);
 }
 
@@ -144,10 +144,19 @@ void demo() {
 namespace builder {
 
 struct Computer {
-    std::string cpu, ram, storage, gpu;
-    void        describe() const {
-        std::cout << "Computer: CPU=" << cpu << " RAM=" << ram << " Storage=" << storage
-                  << " GPU=" << (gpu.empty() ? "None" : gpu) << "\n";
+    std::string cpu;
+    std::string ram;
+    std::string storage;
+    std::string gpu;
+
+    void describe() const {
+        std::println(
+            "Computer: CPU={} RAM={} Storage={} GPU={}",
+            cpu,
+            ram,
+            storage,
+            gpu.empty() ? "None" : gpu
+        );
     }
 };
 
@@ -190,7 +199,7 @@ struct Director {
 };
 
 void demo() {
-    std::cout << "\n=== Builder: Custom Computer Configurator ===\n";
+    std::println("\n Builder: Custom Computer Configurator ");
     PCBuilder bld;
     Director  dir;
     dir.builder = &bld;
@@ -237,13 +246,13 @@ struct Enemy {
 };
 
 struct Goblin : Enemy {
-    void attack() const override { std::cout << "Goblin attacks with a club!\n"; }
+    void attack() const override { std::println("Goblin attacks with a club!"); }
 };
 struct Skeleton : Enemy {
-    void attack() const override { std::cout << "Skeleton attacks with a sword!\n"; }
+    void attack() const override { std::println("Skeleton attacks with a sword!"); }
 };
 struct Dragon : Enemy {
-    void attack() const override { std::cout << "Dragon breathes fire!\n"; }
+    void attack() const override { std::println("Dragon breathes fire!"); }
 };
 
 /// Creator: contains the template algorithm; declares the factory method
@@ -252,7 +261,7 @@ struct Level {
 
     /// Template algorithm that uses the factory method
     void spawnWave(int count) const {
-        std::cout << "Spawning wave of " << count << " enemies:\n";
+        std::println("Spawning wave of {} enemies:", count);
         for (int idx = 0; idx < count; ++idx) {
             auto enemy = createEnemy();
             enemy->attack();
@@ -273,16 +282,16 @@ struct BossLevel : Level {
 };
 
 void demo() {
-    std::cout << "\n=== Factory Method: Game Enemy Spawner ===\n";
+    std::println("\n Factory Method: Game Enemy Spawner ");
     ForestLevel  forest;
     DungeonLevel dungeon;
     BossLevel    boss;
 
-    std::cout << "[Forest Level]\n";
+    std::println("[Forest Level]");
     forest.spawnWave(2);
-    std::cout << "[Dungeon Level]\n";
+    std::println("[Dungeon Level]");
     dungeon.spawnWave(2);
-    std::cout << "[Boss Level]\n";
+    std::println("[Boss Level]");
     boss.spawnWave(1);
 }
 
@@ -315,11 +324,13 @@ namespace prototype {
 
 struct Spell {
     std::string name;
-    int         damage, duration;
+
+    int damage;
+    int duration;
 
     virtual std::unique_ptr<Spell> clone() const = 0;
     virtual void                   describe() const {
-        std::cout << "Spell: " << name << " | DMG=" << damage << " | DUR=" << duration << "s\n";
+        std::println("Spell: {} | DMG={} | DUR={}s", name, damage, duration);
     }
     virtual ~Spell() = default;
 };
@@ -343,7 +354,7 @@ struct SpellRegistry {
     std::unique_ptr<Spell> cast(const std::string& key) const {
         auto itr = registry.find(key);
         if (itr == registry.end()) {
-            std::cerr << "Unknown spell: " << key << "\n";
+            std::println(stderr, "Unknown spell: {}", key);
             return nullptr;
         }
         return itr->second->clone();  // clone the prototype
@@ -351,7 +362,7 @@ struct SpellRegistry {
 };
 
 void demo() {
-    std::cout << "\n=== Prototype: Magic Spell Palette ===\n";
+    std::println("\n Prototype: Magic Spell Palette ");
     SpellRegistry reg;
 
     // Register prototype spells
@@ -430,19 +441,18 @@ class AppConfig {
     int         maxThreads = 8;
 
     void describe() const {
-        std::cout << "Config: theme=" << theme << " lang=" << language << " threads=" << maxThreads
-                  << "\n";
+        std::println("Config: theme={} lang={} threads={}", theme, language, maxThreads);
     }
 
    private:
     AppConfig() {
         // Would parse config.json here
-        std::cout << "[AppConfig] Loaded from disk (happens exactly once)\n";
+        std::println("[AppConfig] Loaded from disk (happens exactly once)");
     }
 };
 
 void demo() {
-    std::cout << "\n=== Singleton: Application Config Manager ===\n";
+    std::println("\n Singleton: Application Config Manager ");
 
     // Multiple call sites - all get the same instance
     AppConfig& cfg1 = AppConfig::instance();
@@ -453,14 +463,12 @@ void demo() {
     cfg1.describe();       // …visible through cfg1 - same object
 
     assert(&cfg1 == &cfg2);
-    std::cout << "cfg1 and cfg2 are the same object: " << std::boolalpha << (&cfg1 == &cfg2)
-              << "\n";
+    std::println("cfg1 and cfg2 are the same object: {}", &cfg1 == &cfg2);
 }
 
 }  // namespace singleton
 
-// ─────────────────────────────────────────────────────────────────────────────
-// -----------------------------------------------------------------------------
+/// Main function
 int main() {
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);

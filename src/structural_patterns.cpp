@@ -7,8 +7,8 @@
 //   Adapter, Bridge, Composite, Decorator, Facade, Flyweight, Proxy
 // =============================================================================
 
-#include <iostream>
 #include <memory>
+#include <print>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -51,8 +51,8 @@ struct PaymentProcessor {
 
 /// Adaptee: the existing third-party Stripe SDK (can't modify)
 struct StripeAPI {
-    void makePayment(double usd) { std::cout << "[Stripe] Processing payment of $" << usd << "\n"; }
-    void reverseCharge(double usd) { std::cout << "[Stripe] Reversing charge of $" << usd << "\n"; }
+    void makePayment(double usd) { std::println("[Stripe] Processing payment of ${}", usd); }
+    void reverseCharge(double usd) { std::println("[Stripe] Reversing charge of ${}", usd); }
 };
 
 /// Object Adapter: wraps StripeAPI, exposes PaymentProcessor interface
@@ -68,12 +68,12 @@ struct StripeAdapter : PaymentProcessor {
 
 /// Client: only knows PaymentProcessor; unaware of Stripe internals
 void processOrder(PaymentProcessor& prc, double total) {
-    std::cout << "Charging customer: ";
+    std::print("Charging customer: ");
     prc.charge(total);
 }
 
 void demo() {
-    std::cout << "\n=== Adapter: Legacy Payment Gateway ===\n";
+    std::println("\n Adapter: Legacy Payment Gateway ");
     auto          stripeSDK = std::make_shared<StripeAPI>();
     StripeAdapter adp(stripeSDK);
     processOrder(adp, 99.99);
@@ -116,15 +116,15 @@ struct Device {
 };
 
 struct TV : Device {
-    void        powerOn() override { std::cout << "[TV] Power ON\n"; }
-    void        powerOff() override { std::cout << "[TV] Power OFF\n"; }
-    void        setVolume(int vol) override { std::cout << "[TV] Volume → " << vol << "\n"; }
+    void        powerOn() override { std::println("[TV] Power ON"); }
+    void        powerOff() override { std::println("[TV] Power OFF"); }
+    void        setVolume(int vol) override { std::println("[TV] Volume → {}", vol); }
     std::string name() const override { return "TV"; }
 };
 struct Radio : Device {
-    void        powerOn() override { std::cout << "[Radio] Power ON\n"; }
-    void        powerOff() override { std::cout << "[Radio] Power OFF\n"; }
-    void        setVolume(int vol) override { std::cout << "[Radio] Volume → " << vol << "\n"; }
+    void        powerOn() override { std::println("[Radio] Power ON"); }
+    void        powerOff() override { std::println("[Radio] Power OFF"); }
+    void        setVolume(int vol) override { std::println("[Radio] Volume → {}", vol); }
     std::string name() const override { return "Radio"; }
 };
 
@@ -144,13 +144,13 @@ struct Remote {
 struct AdvancedRemote : Remote {
     explicit AdvancedRemote(std::shared_ptr<Device> device) : Remote(device) {}
     void mute() {
-        std::cout << "[AdvancedRemote] Muting " << m_device->name() << "\n";
+        std::println("[AdvancedRemote] Muting {}", m_device->name());
         m_device->setVolume(0);
     }
 };
 
 void demo() {
-    std::cout << "\n=== Bridge: Remote Control & Devices ===\n";
+    std::println("\n Bridge: Remote Control & Devices ");
     auto tvDev = std::make_shared<TV>();
     auto radio = std::make_shared<Radio>();
 
@@ -204,7 +204,7 @@ struct File : FileSystemNode {
     File(std::string nam, long byt) : FileSystemNode(std::move(nam)), bytes(byt) {}
     long size() const override { return bytes; }
     void print(int indent) const override {
-        std::cout << std::string(indent, ' ') << "📄 " << name << " (" << bytes << " B)\n";
+        std::println("{}📄 {} ({} B)", std::string(indent, ' '), name, bytes);
     }
 };
 
@@ -219,13 +219,13 @@ struct Folder : FileSystemNode {
         return total;
     }
     void print(int indent) const override {
-        std::cout << std::string(indent, ' ') << "📁 " << name << "/\n";
+        std::println("{}📁 {}/", std::string(indent, ' '), name);
         for (const auto& chd : children) chd->print(indent + 4);
     }
 };
 
 void demo() {
-    std::cout << "\n=== Composite: File System ===\n";
+    std::println("\n Composite: File System ");
 
     auto root = std::make_shared<Folder>("root");
     auto src  = std::make_shared<Folder>("src");
@@ -239,7 +239,7 @@ void demo() {
     root->add(std::make_shared<File>(".gitignore", 120));
 
     root->print(0);
-    std::cout << "Total size: " << root->size() << " B\n";
+    std::println("Total size: {} B", root->size());
 }
 
 }  // namespace composite
@@ -314,12 +314,10 @@ struct WhippedCream : AddOnDecorator {
     }
 };
 
-void printOrder(const Beverage& bev) {
-    std::cout << bev.description() << " - $" << bev.cost() << "\n";
-}
+void printOrder(const Beverage& bev) { std::println("{} - ${}", bev.description(), bev.cost()); }
 
 void demo() {
-    std::cout << "\n=== Decorator: Coffee Shop Order System ===\n";
+    std::println("\n Decorator: Coffee Shop Order System ");
 
     // Plain espresso
     auto order1 = std::make_unique<Espresso>();
@@ -366,28 +364,28 @@ namespace facade {
 
 // Subsystem classes - complex, fine-grained
 struct Amplifier {
-    void on() { std::cout << "  Amplifier ON\n"; }
-    void setVolume(int vol) { std::cout << "  Amplifier volume → " << vol << "\n"; }
-    void off() { std::cout << "  Amplifier OFF\n"; }
+    void on() { std::println("Amplifier ON"); }
+    void setVolume(int vol) { std::println("Amplifier volume → {}", vol); }
+    void off() { std::println("Amplifier OFF"); }
 };
 struct DVDPlayer {
-    void on() { std::cout << "  DVD Player ON\n"; }
-    void play(const std::string& mov) { std::cout << "  DVD playing: " << mov << "\n"; }
-    void stop() { std::cout << "  DVD stopped\n"; }
-    void off() { std::cout << "  DVD Player OFF\n"; }
+    void on() { std::println("DVD Player ON"); }
+    void play(const std::string& mov) { std::println("DVD playing: {}", mov); }
+    void stop() { std::println("DVD stopped"); }
+    void off() { std::println("DVD Player OFF"); }
 };
 struct Projector {
-    void on() { std::cout << "  Projector ON\n"; }
-    void widescreen() { std::cout << "  Projector → widescreen mode\n"; }
-    void off() { std::cout << "  Projector OFF\n"; }
+    void on() { std::println("Projector ON"); }
+    void widescreen() { std::println("Projector → widescreen mode"); }
+    void off() { std::println("Projector OFF"); }
 };
 struct Screen {
-    void lower() { std::cout << "  Screen lowering...\n"; }
-    void raise() { std::cout << "  Screen raising...\n"; }
+    void lower() { std::println("Screen lowering..."); }
+    void raise() { std::println("Screen raising..."); }
 };
 struct Lights {
-    void dim(int level) { std::cout << "  Lights dimmed to " << level << "%\n"; }
-    void on() { std::cout << "  Lights ON\n"; }
+    void dim(int level) { std::println("Lights dimmed to {}%", level); }
+    void on() { std::println("Lights ON"); }
 };
 
 /// Façade: simple interface over the whole subsystem
@@ -399,7 +397,7 @@ struct HomeTheaterFacade {
     Lights    lights;
 
     void watchMovie(const std::string& movie) {
-        std::cout << "Getting ready to watch \"" << movie << "\"...\n";
+        std::println("Getting ready to watch \"{}\"...", movie);
         lights.dim(10);
         screen.lower();
         proj.on();
@@ -411,7 +409,7 @@ struct HomeTheaterFacade {
     }
 
     void endMovie() {
-        std::cout << "Shutting down theater...\n";
+        std::println("Shutting down theater...");
         dvd.stop();
         dvd.off();
         amp.off();
@@ -422,10 +420,10 @@ struct HomeTheaterFacade {
 };
 
 void demo() {
-    std::cout << "\n=== Façade: Home Theater System ===\n";
+    std::println("\n Façade: Home Theater System ");
     HomeTheaterFacade theater;
     theater.watchMovie("Interstellar");
-    std::cout << "... watching ...\n";
+    std::println("... watching ...");
     theater.endMovie();
 }
 
@@ -463,8 +461,7 @@ struct TreeType {
 
     // Extrinsic state (posX, posY) passed in - NOT stored here
     void draw(int posX, int posY) const {
-        std::cout << "[" << species << "@(" << posX << "," << posY << ")] "
-                  << "color=" << color << " tex=" << texture << "\n";
+        std::println("[{}@({},{})] color={} tex={}", species, posX, posY, color, texture);
     }
 };
 
@@ -478,7 +475,7 @@ struct TreeFactory {
         std::string key = species + "|" + texture + "|" + color;
         auto        itr = pool.find(key);
         if (itr == pool.end()) {
-            std::cout << "  [Factory] Creating new TreeType: " << species << "\n";
+            std::println("[Factory] Creating new TreeType: {}", species);
             pool[key] = std::make_shared<TreeType>(species, texture, color);
         }
         return pool[key];
@@ -494,7 +491,7 @@ struct Tree {
 };
 
 void demo() {
-    std::cout << "\n=== Flyweight: Forest Renderer ===\n";
+    std::println("\n Flyweight: Forest Renderer ");
     TreeFactory       factory;
     std::vector<Tree> forest;
 
@@ -509,8 +506,9 @@ void demo() {
     for (auto [tpX, tpY] : std::vector<std::pair<int, int>> {{15, 55}, {70, 30}, {5, 80}})
         forest.push_back({tpX, tpY, pine});
 
-    std::cout << "Drawing " << forest.size() << " trees using " << factory.typeCount()
-              << " TreeType flyweights:\n";
+    std::println(
+        "Drawing {} trees using {} TreeType flyweights:", forest.size(), factory.typeCount()
+    );
     for (const auto& tre : forest) tre.draw();
 }
 
@@ -555,9 +553,9 @@ struct RealImage : Image {
     explicit RealImage(std::string fname)
         : filename(std::move(fname)), m_width(1920), m_height(1080) {
         // Simulate slow disk load
-        std::cout << "  [RealImage] Loading '" << filename << "' from disk...\n";
+        std::println("[RealImage] Loading '{}' from disk...", filename);
     }
-    void draw() const override { std::cout << "  [RealImage] Drawing '" << filename << "'\n"; }
+    void draw() const override { std::println("[RealImage] Drawing '{}'", filename); }
     int  width() const override { return m_width; }
     int  height() const override { return m_height; }
 };
@@ -568,7 +566,7 @@ struct ImageProxy : Image {
 
     void draw() const override {
         if (!m_real) {
-            std::cout << "  [Proxy] First draw - loading real image now\n";
+            std::println("[Proxy] First draw - loading real image now");
             m_real = std::make_unique<RealImage>(m_filename);
         }
         m_real->draw();
@@ -582,29 +580,30 @@ struct ImageProxy : Image {
 };
 
 void demo() {
-    std::cout << "\n=== Proxy: Virtual Image Loader ===\n";
+    std::println("\n Proxy: Virtual Image Loader ");
     // Three images created (no disk I/O yet)
     std::vector<std::unique_ptr<Image>> images;
     images.push_back(std::make_unique<ImageProxy>("photo1.jpg"));
     images.push_back(std::make_unique<ImageProxy>("photo2.jpg"));
     images.push_back(std::make_unique<ImageProxy>("photo3.jpg"));
 
-    std::cout << "All image proxies created. No disk reads yet.\n";
-    std::cout << "Layout uses width/height without loading: " << images[0]->width() << "x"
-              << images[0]->height() << "\n";
+    std::println("All image proxies created. No disk reads yet.");
+    std::println(
+        "Layout uses width/height without loading: {}x{}", images[0]->width(), images[0]->height()
+    );
 
-    std::cout << "\nUser scrolls to see image 0 and image 2:\n";
+    std::println("\nUser scrolls to see image 0 and image 2:");
     images[0]->draw();  // loads photo1.jpg
     images[2]->draw();  // loads photo3.jpg
     // photo2.jpg never loaded - user never scrolled there
 
-    std::cout << "\nDrawing image 0 again (already loaded, no disk I/O):\n";
+    std::println("\nDrawing image 0 again (already loaded, no disk I/O):");
     images[0]->draw();
 }
 
 }  // namespace proxy
 
-// ─────────────────────────────────────────────────────────────────────────────
+/// Main function
 int main() {
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
