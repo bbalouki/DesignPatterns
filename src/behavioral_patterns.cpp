@@ -17,7 +17,6 @@
 #include <string>
 #include <vector>
 #ifdef _WIN32
-#define NOMINMAX
 #include <windows.h>
 #endif
 
@@ -580,7 +579,8 @@ class TextEditor {
         std::println("Typed: \"{}\" → buffer: \"{}\"", text, m_buffer);
     }
     void deleteLast(size_t num) {
-        num = std::min(num, m_buffer.size());
+        // Adding parentheses around std::min prevents macro replacement
+        num = (std::min)(num, m_buffer.size());
         m_buffer.erase(m_buffer.size() - num);
         std::println("Deleted {} chars → buffer: \"{}\"", num, m_buffer);
     }
